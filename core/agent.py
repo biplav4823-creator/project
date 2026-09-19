@@ -399,10 +399,14 @@ Rules:
 
             try:
 
-                result = self.tools.execute(
-                    tool_name,
-                    arguments
+                route = self.router.route(decision)
+                result = self.executor.execute(
+                    self.tools,
+                    route.tool,
+                    route.arguments
                 )
+                verified = self.verifier.verify(result)
+                result = verified['result']
 
                 final_prompt = f"""
 You are JARVIS.
