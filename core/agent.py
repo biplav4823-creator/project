@@ -1,0 +1,429 @@
+import re
+import json
+
+from .llm import ask_ollama
+from tools.registry import ToolRegistry, Tool
+
+
+class Agent:
+
+    def __init__(self):
+        self.tools = ToolRegistry()
+
+    # =========================================================
+    # TOOL REGISTRATION
+    # =========================================================
+
+    def register_tool(self, name, description, function):
+        self.tools.register(
+            Tool(
+                name=name,
+                description=description,
+                function=function
+            )
+        )
+
+    def _find_tool(self, name):
+        return self.tools.get(name)
+
+    # =========================================================
+    # MATH ROUTER
+    # =========================================================
+
+    def _local_math(self, text):
+
+        from tools.mathematics import (
+            calculate,
+            derivative,
+            nth_derivative,
+            integral,
+            definite_integral,
+            limit,
+            series,
+            solve_equation,
+            factor,
+            expand,
+            simplify,
+            numerical
+        )
+
+        original = text.strip()
+        s = original.lower().strip()
+
+        # -----------------------------------------------------
+        # 1. PURE ARITHMETIC
+        # -----------------------------------------------------
+
+        if re.fullmatch(
+            r"[0-9+\-*/().%\s^]+",
+            s
+        ):
+            try:
+                return calculate(original)
+            except Exception:
+                pass
+
+        # -----------------------------------------------------
+        # 2. DERIVATIVE
+        # -----------------------------------------------------
+
+        m = re.search(
+            r"(?:derivative|differentiate|differentiation)"
+            r"(?:\s+of)?\s+(.+)",
+            s
+        )
+
+        if m:
+            expression = m.group(1).strip()
+
+            # Remove common wording
+            expression = re.sub(
+                r"\s+(with\s+respect\s+to|wrt)\s+[a-z]\s*$",
+                "",
+                expression
+            )
+
+            try:
+                return derivative(expression)
+            except Exception:
+                pass
+
+        # -----------------------------------------------------
+        # 3. INTEGRAL
+        # -----------------------------------------------------
+
+        m = re.search(
+            r"(?:integral|integrate|integration)"
+            r"(?:\s+of)?\s+(.+)",
+            s
+        )
+
+        if m:
+
+            expression = m.group(1).strip()
+
+            # Detect definite integral:
+            # integral of x^2 from 0 to 2
+            definite = re.search(
+                r"(.+?)\s+from\s+(.+?)\s+to\s+(.+)",
+                expression
+            )
+
+            if definite:
+
+                expr = definite.group(1).strip()
+                lower = definite.group(2).strip()
+                upper = definite.group(3).strip()
+
+                try:
+                    return definite_integral(
+                        expr,
+                        "x",
+                        lower,
+                        upper
+                    )
+                except Exception:
+                    pass
+
+            try:
+                return integral(expression)
+            except Exception:
+                pass
+
+        # -----------------------------------------------------
+        # 4. LIMIT
+        # -----------------------------------------------------
+
+        m = re.search(
+            r"(?:limit)\s+(?:of\s+)?(.+?)"
+            r"\s+(?:as|when)\s+([a-zA-Z])\s*(?:->|to)\s*(.+)",
+            s
+        )
+
+        if m:
+
+            expression = m.group(1).strip()
+            variable = m.group(2).strip()
+            point = m.group(3).strip()
+
+            try:
+                return limit(
+                    expression,
+                    variable,
+                    point
+                )
+            except Exception:
+                pass
+
+        # -----------------------------------------------------
+        # 5. SOLVE EQUATION
+        # -----------------------------------------------------
+
+        m = re.search(
+            r"(?:solve|solution\s+of|find\s+the\s+roots?)"
+            r"\s+(.+)",
+            s
+        )
+
+        if m:
+
+            expression = m.group(1).strip()
+
+            if "=" in expression:
+
+                # Detect variable if possible
+                variables = re.findall(
+                    r"[a-zA-Z]",
+                    expression
+                )
+
+                variable = "x"
+
+                if variables:
+                    variable = variables[0]
+
+                try:
+                    return solve_equation(
+                        expression,
+                        variable
+                    )
+                except Exception:
+                    pass
+
+        # -----------------------------------------------------
+        # 6. FACTOR
+        # -----------------------------------------------------
+
+        m = re.search(
+            r"(?:factor|factorize|factorise)"
+            r"(?:\s+)?(?:the\s+expression\s+)?(.+)",
+            s
+        )
+
+        if m:
+
+            expression = m.group(1).strip()
+
+            try:
+                return factor(expression)
+            except Exception:
+                pass
+
+        # -----------------------------------------------------
+        # 7. EXPAND
+        # -----------------------------------------------------
+
+        m = re.search(
+            r"(?:expand)"
+            r"(?:\s+)?(?:the\s+expression\s+)?(.+)",
+            s
+        )
+
+        if m:
+
+            expression = m.group(1).strip()
+
+            try:
+                return expand(expression)
+            except Exception:
+                pass
+
+        # -----------------------------------------------------
+        # 8. SIMPLIFY
+        # -----------------------------------------------------
+
+        m = re.search(
+            r"(?:simplify)"
+            r"(?:\s+)?(?:the\s+expression\s+)?(.+)",
+            s
+        )
+
+        if m:
+
+            expression = m.group(1).strip()
+
+            try:
+                return simplify(expression)
+            except Exception:
+                pass
+
+        # -----------------------------------------------------
+        # 9. NUMERICAL APPROXIMATION
+        # -----------------------------------------------------
+
+        m = re.search(
+            r"(?:numerical value|approximate|approximation)"
+            r"(?:\s+of)?\s+(.+)",
+            s
+        )
+
+        if m:
+
+            expression = m.group(1).strip()
+
+            try:
+                return numerical(expression)
+            except Exception:
+                pass
+
+        return None
+
+    # =========================================================
+    # LLM DECISION
+    # =========================================================
+
+    def decide(self, user_input):
+
+        tools = self.tools.list_tools()
+
+        tool_text = "\n".join(
+            f"- {tool.name}: {tool.description}"
+            for tool in tools
+        )
+
+        prompt = f"""
+You are JARVIS, a local AI assistant.
+
+Available tools:
+{tool_text}
+
+User request:
+{user_input}
+
+Decide whether a registered tool is required.
+
+Return ONLY valid JSON:
+
+{{
+    "action": "answer",
+    "tool": null,
+    "arguments": {{}}
+}}
+
+OR
+
+{{
+    "action": "tool",
+    "tool": "tool_name",
+    "arguments": {{}}
+}}
+
+Rules:
+
+1. Never invent tools.
+2. Use a registered tool only when appropriate.
+3. Do not perform mathematical calculations yourself when a
+   mathematical tool is available.
+4. Arguments must match the tool's function parameters.
+5. Return JSON only.
+"""
+
+        result = ask_ollama(prompt)
+
+        try:
+            return json.loads(result)
+
+        except json.JSONDecodeError:
+
+            # Sometimes local models add surrounding text.
+            match = re.search(
+                r"\{.*\}",
+                result,
+                re.DOTALL
+            )
+
+            if match:
+
+                try:
+                    return json.loads(
+                        match.group(0)
+                    )
+                except Exception:
+                    pass
+
+        return {
+            "action": "answer",
+            "tool": None,
+            "arguments": {}
+        }
+
+    # =========================================================
+    # MAIN EXECUTION
+    # =========================================================
+
+    def run(self, user_input):
+
+        user_input = user_input.strip()
+
+        if not user_input:
+            return "Please provide a request."
+
+        # -----------------------------------------------------
+        # FAST LOCAL MATH
+        # -----------------------------------------------------
+
+        math_result = self._local_math(
+            user_input
+        )
+
+        if math_result is not None:
+
+            return str(math_result)
+
+        # -----------------------------------------------------
+        # LLM / TOOL ROUTING
+        # -----------------------------------------------------
+
+        decision = self.decide(
+            user_input
+        )
+
+        if decision.get("action") == "tool":
+
+            tool_name = decision.get(
+                "tool"
+            )
+
+            arguments = decision.get(
+                "arguments",
+                {}
+            )
+
+            try:
+
+                result = self.tools.execute(
+                    tool_name,
+                    arguments
+                )
+
+                final_prompt = f"""
+You are JARVIS.
+
+User request:
+{user_input}
+
+Tool result:
+{result}
+
+Explain the result clearly and concisely.
+Do not invent information that is not present
+in the tool result.
+"""
+
+                return ask_ollama(
+                    final_prompt
+                )
+
+            except Exception as e:
+
+                return (
+                    f"Tool execution failed: {e}"
+                )
+
+        # -----------------------------------------------------
+        # NORMAL CONVERSATION
+        # -----------------------------------------------------
+
+        return ask_ollama(
+            user_input
+        )
