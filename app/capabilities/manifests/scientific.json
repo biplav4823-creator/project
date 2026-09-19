@@ -1,0 +1,8 @@
+{
+    "version":  "1.0",
+    "name":  "scientific",
+    "description":  "Scientific modelling and simulation",
+    "verification":  "scientific_validation",
+    "status":  "planned",
+    "requirements":  "requirements/scientific.txt"
+}

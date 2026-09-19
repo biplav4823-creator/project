@@ -1,0 +1,8 @@
+{
+    "version":  "1.0",
+    "name":  "data",
+    "description":  "Data analysis and visualization",
+    "verification":  "data_validation_and_tests",
+    "status":  "available",
+    "requirements":  "requirements/data.txt"
+}

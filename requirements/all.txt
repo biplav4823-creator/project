@@ -1,0 +1,11 @@
+matplotlib
+numpy
+pandas
+psutil
+pydantic
+pytest
+python-dotenv
+requests
+rich
+scipy
+sympy

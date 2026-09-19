@@ -1,0 +1,8 @@
+{
+    "version":  "1.0",
+    "name":  "mathematics",
+    "description":  "Mathematical and numerical computation",
+    "verification":  "symbolic_and_numerical",
+    "status":  "available",
+    "requirements":  "requirements/mathematics.txt"
+}

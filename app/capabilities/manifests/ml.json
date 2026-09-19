@@ -1,0 +1,8 @@
+{
+    "version":  "1.0",
+    "name":  "ml",
+    "description":  "Machine learning workflows",
+    "verification":  "model_evaluation",
+    "status":  "planned",
+    "requirements":  "requirements/ml.txt"
+}
