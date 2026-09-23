@@ -1,4 +1,7 @@
-﻿class Orchestrator:
+﻿from core.state import JobState, StepState
+
+
+class Orchestrator:
     def __init__(self, planner, router, executor, verifier, explainer):
         self.planner = planner
         self.router = router
@@ -9,34 +12,42 @@
     def run(self, user_input, tools):
         plan = self.planner.plan(user_input)
 
-        state = {
-            "goal": plan["goal"],
-            "plan": plan["steps"],
-            "current_step": None,
-            "completed_steps": [],
-            "failed_steps": [],
-            "results": [],
-            "status": "running"
-        }
+        steps = [
+            StepState(
+                id=step["id"],
+                description=step["description"],
+                status=step.get("status", "pending"),
+                depends_on=step.get("depends_on", []),
+                result=step.get("result")
+            )
+            for step in plan["steps"]
+        ]
 
-        for step in state["plan"]:
-            state["current_step"] = step["id"]
+        state = JobState(
+            job_id="local-job",
+            user_input=user_input,
+            goal=plan["goal"],
+            plan=steps
+        )
 
-            dependencies = step.get("depends_on", [])
+        state.start()
+
+        for step in state.plan:
+            state.current_step = step.id
 
             dependency_results = [
                 item
-                for item in state["results"]
-                if item["step"] in dependencies
+                for item in state.intermediate_results
+                if item["step"] in step.depends_on
             ]
 
             decision = {
                 "action": "answer",
                 "tool": None,
                 "arguments": {},
-                "description": step["description"],
-                "step_id": step["id"],
-                "depends_on": dependencies,
+                "description": step.description,
+                "step_id": step.id,
+                "depends_on": step.depends_on,
                 "previous_results": dependency_results
             }
 
@@ -52,52 +63,21 @@
 
                     verified = self.verifier.verify(result)
 
-                    step["status"] = "completed"
-                    step["result"] = verified
-
-                    state["completed_steps"].append(step["id"])
-
-                    state["results"].append({
-                        "step": step["id"],
-                        "description": step["description"],
-                        "result": verified,
-                        "previous_results": dependency_results
-                    })
+                    state.complete_step(step.id, verified)
 
                 except Exception as exc:
-                    step["status"] = "failed"
-                    step["result"] = {
-                        "error": str(exc)
-                    }
-
-                    state["failed_steps"].append(step["id"])
-
-                    state["results"].append({
-                        "step": step["id"],
-                        "description": step["description"],
-                        "error": str(exc),
-                        "previous_results": dependency_results
-                    })
-
-                    state["status"] = "failed"
+                    state.fail_step(step.id, str(exc))
                     break
 
             else:
-                step["status"] = "pending"
-
-                state["results"].append({
-                    "step": step["id"],
-                    "description": step["description"],
+                state.intermediate_results.append({
+                    "step": step.id,
+                    "description": step.description,
                     "status": "pending",
                     "previous_results": dependency_results
                 })
 
-        state["current_step"] = None
-
-        if state["status"] != "failed":
-            if len(state["completed_steps"]) == len(state["plan"]):
-                state["status"] = "completed"
-            else:
-                state["status"] = "pending"
+        state.current_step = None
+        state.finish()
 
         return self.explainer.explain(state)
