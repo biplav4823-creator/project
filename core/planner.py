@@ -1,4 +1,4 @@
-class Planner:
+﻿class Planner:
     def plan(self, user_input):
         text = user_input.strip()
 
@@ -12,13 +12,28 @@ class Planner:
         steps = None
 
         for separator in separators:
-            if separator in text.lower():
-                parts = text.lower().split(separator)
-                steps = [
-                    part.strip()
-                    for part in parts
-                    if part.strip()
-                ]
+            lower_text = text.lower()
+            position = lower_text.find(separator)
+
+            if position != -1:
+                parts = []
+                start = 0
+
+                while position != -1:
+                    part = text[start:position].strip()
+
+                    if part:
+                        parts.append(part)
+
+                    start = position + len(separator)
+                    position = lower_text.find(separator, start)
+
+                final_part = text[start:].strip()
+
+                if final_part:
+                    parts.append(final_part)
+
+                steps = parts
                 break
 
         if not steps:
@@ -27,10 +42,17 @@ class Planner:
         planned_steps = []
 
         for index, step in enumerate(steps, start=1):
+            dependencies = []
+
+            if index > 1:
+                dependencies = [index - 1]
+
             planned_steps.append({
                 "id": index,
                 "description": step,
-                "status": "pending"
+                "status": "pending",
+                "depends_on": dependencies,
+                "result": None
             })
 
         return {
