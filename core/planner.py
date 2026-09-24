@@ -1,79 +1,38 @@
+from __future__ import annotations
+import re
+
 class Planner:
     def __init__(self, capabilities=None):
         self.capabilities = capabilities
 
+    def _split(self, user_input):
+        parts = re.split(r"\s+(?:and then|then|after that|followed by)\s+", user_input.strip(), flags=re.I)
+        return [p.strip() for p in parts if p.strip()]
+
     def plan(self, user_input):
-        text = user_input.strip()
+        goal = user_input.strip()
+        descriptions = self._split(goal)
+        steps = []
 
-        separators = [
-            " and then ",
-            " then ",
-            " after that ",
-            " followed by ",
-        ]
-
-        steps = None
-
-        for separator in separators:
-            lower_text = text.lower()
-            position = lower_text.find(separator)
-
-            if position != -1:
-                parts = []
-                start = 0
-
-                while position != -1:
-                    part = text[start:position].strip()
-
-                    if part:
-                        parts.append(part)
-
-                    start = position + len(separator)
-                    position = lower_text.find(separator, start)
-
-                final_part = text[start:].strip()
-
-                if final_part:
-                    parts.append(final_part)
-
-                steps = parts
-                break
-
-        if not steps:
-            steps = [text]
-
-        planned_steps = []
-
-        for index, step in enumerate(steps, start=1):
-            dependencies = [index - 1] if index > 1 else []
-
+        for i, description in enumerate(descriptions, 1):
+            capability = None
             candidates = []
 
-            if self.capabilities is not None:
-                candidates = self.capabilities.discover(
-                    step,
-                    limit=3
-                )
+            if self.capabilities:
+                found = self.capabilities.discover(description, limit=3)
+                candidates = [c.name for c in found]
+                if candidates:
+                    capability = candidates[0]
 
-            capability = (
-                candidates[0].name
-                if candidates
-                else None
-            )
-
-            planned_steps.append({
-                "id": index,
-                "description": step,
+            steps.append({
+                "id": i,
+                "description": description,
                 "status": "pending",
-                "depends_on": dependencies,
+                "depends_on": [i - 1] if i > 1 else [],
                 "capability": capability,
-                "candidates": [
-                    item.name for item in candidates
-                ],
+                "candidates": candidates,
                 "result": None,
             })
 
-        return {
-            "goal": user_input,
-            "steps": planned_steps,
-        }
+        return {"goal": goal, "steps": steps}
+
