@@ -1,4 +1,5 @@
-﻿from .capability import Capability
+import re
+from .capability import Capability
 
 
 class CapabilityRegistry:
@@ -28,32 +29,186 @@ class CapabilityRegistry:
         return sorted(self._capabilities.keys())
 
     def discover(self, query, limit=5):
-        """Return capabilities ranked by relevance to a natural-language query."""
+        """Return capabilities matched by explicit user intent."""
         if not query:
             return []
 
-        terms = set(str(query).lower().replace("_", " ").split())
-        scored = []
+        try:
+            limit = max(1, int(limit))
+        except (TypeError, ValueError):
+            limit = 5
 
-        for capability in self._capabilities.values():
-            name = str(capability.name).lower().replace("_", " ")
-            description = str(capability.description).lower()
-            haystack = f"{name} {description}"
+        q = str(query).lower().strip()
 
-            score = 0
-            for term in terms:
-                if term in name:
-                    score += 4
-                elif term in description:
-                    score += 2
-                elif term in haystack:
-                    score += 1
+        # Ordered from most specific to most general.
+        intents = [
+            (
+                "nth_derivative",
+                (
+                    "nth derivative",
+                    "second derivative",
+                    "third derivative",
+                    "fourth derivative",
+                    "higher derivative",
+                    "higher order derivative",
+                ),
+            ),
+            (
+                "definite_integral",
+                (
+                    "definite integral",
+                    "integral from",
+                    "integral between",
+                    "integral over",
+                    "bounds",
+                ),
+            ),
+            (
+                "solve_system",
+                (
+                    "solve system",
+                    "system of equations",
+                    "simultaneous equations",
+                ),
+            ),
+            (
+                "matrix_determinant",
+                (
+                    "matrix determinant",
+                    "determinant",
+                    "det of",
+                ),
+            ),
+            (
+                "matrix_inverse",
+                (
+                    "matrix inverse",
+                    "inverse of a matrix",
+                    "invert matrix",
+                ),
+            ),
+            (
+                "matrix_rank",
+                (
+                    "matrix rank",
+                    "rank of a matrix",
+                ),
+            ),
+            (
+                "derivative",
+                (
+                    "differentiate",
+                    "derivative",
+                    "differentiation",
+                    "find derivative",
+                    "calculate derivative",
+                ),
+            ),
+            (
+                "integral",
+                (
+                    "integrate",
+                    "integral",
+                    "integration",
+                    "antiderivative",
+                    "indefinite integral",
+                ),
+            ),
+            (
+                "solve_equation",
+                (
+                    "solve",
+                    "equation",
+                    "root",
+                    "roots",
+                ),
+            ),
+            (
+                "factor",
+                (
+                    "factor",
+                    "factorize",
+                    "factorise",
+                    "factoring",
+                ),
+            ),
+            (
+                "expand",
+                (
+                    "expand",
+                    "expansion",
+                    "expanded",
+                ),
+            ),
+            (
+                "simplify",
+                (
+                    "simplify",
+                    "simplification",
+                    "reduce expression",
+                ),
+            ),
+            (
+                "limit",
+                (
+                    "limit",
+                    "limiting",
+                    "approaches",
+                    "tends to",
+                ),
+            ),
+            (
+                "series",
+                (
+                    "series",
+                    "taylor",
+                    "maclaurin",
+                    "power series",
+                ),
+            ),
+            (
+                "numerical",
+                (
+                    "numerical",
+                    "numeric",
+                    "approximate",
+                    "approximation",
+                    "decimal approximation",
+                ),
+            ),
+            (
+                "calculate",
+                (
+                    "calculate",
+                    "calculation",
+                    "compute",
+                    "evaluate",
+                    "evaluation",
+                    "arithmetic",
+                ),
+            ),
+            (
+                "run_python",
+                (
+                    "python",
+                    "python code",
+                    "run code",
+                    "execute code",
+                    "numpy",
+                    "pandas",
+                ),
+            ),
+        ]
 
-            if score > 0:
-                scored.append((score, capability))
+        matches = []
 
-        scored.sort(key=lambda item: (-item[0], item[1].name))
-        return [capability for _, capability in scored[:max(1, int(limit))]]
+        for name, phrases in intents:
+            if any(phrase in q for phrase in phrases):
+                capability = self._capabilities.get(name)
+                if capability is not None:
+                    matches.append(capability)
+
+        return matches[:limit]
 
     def execute(self, name: str, arguments=None):
         capability = self.get(name)

@@ -296,17 +296,28 @@ class Agent:
 
     def decide(self, user_input):
 
-        tools = self.tools.list_tools()
+        capabilities = self.discover_capabilities(
+            user_input,
+            limit=6
+        )
+
+        candidate_names = {
+            capability.name
+            for capability in capabilities
+        }
 
         tool_text = "\n".join(
-            f"- {tool.name}: {tool.description}"
-            for tool in tools
+            f"- {capability.name}: {capability.description}"
+            for capability in capabilities
         )
+
+        if not tool_text:
+            tool_text = "No strongly matched capabilities were found."
 
         prompt = f"""
 You are JARVIS, a local AI assistant.
 
-Available tools:
+Discovered candidate capabilities:
 {tool_text}
 
 User request:
@@ -333,17 +344,31 @@ OR
 Rules:
 
 1. Never invent tools.
-2. Use a registered tool only when appropriate.
-3. Do not perform mathematical calculations yourself when a
-   mathematical tool is available.
-4. Arguments must match the tool's function parameters.
-5. Return JSON only.
+2. You may select ONLY from the discovered candidate capabilities listed above.
+3. Use a candidate capability only when appropriate.
+4. Do not perform mathematical calculations yourself when a
+   mathematical capability is available.
+5. Arguments must match the selected tool's function parameters.
+6. If no discovered capability is appropriate, return action=answer.
+7. Return JSON only.
 """
 
         result = ask_ollama(prompt)
 
         try:
-            return json.loads(result)
+            decision = json.loads(result)
+
+            if decision.get("action") == "tool":
+                selected_tool = decision.get("tool")
+
+                if selected_tool not in candidate_names:
+                    return {
+                        "action": "answer",
+                        "tool": None,
+                        "arguments": {}
+                    }
+
+            return decision
 
         except json.JSONDecodeError:
 
