@@ -1,4 +1,7 @@
-﻿class Planner:
+class Planner:
+    def __init__(self, capabilities=None):
+        self.capabilities = capabilities
+
     def plan(self, user_input):
         text = user_input.strip()
 
@@ -6,7 +9,7 @@
             " and then ",
             " then ",
             " after that ",
-            " followed by "
+            " followed by ",
         ]
 
         steps = None
@@ -42,20 +45,35 @@
         planned_steps = []
 
         for index, step in enumerate(steps, start=1):
-            dependencies = []
+            dependencies = [index - 1] if index > 1 else []
 
-            if index > 1:
-                dependencies = [index - 1]
+            candidates = []
+
+            if self.capabilities is not None:
+                candidates = self.capabilities.discover(
+                    step,
+                    limit=3
+                )
+
+            capability = (
+                candidates[0].name
+                if candidates
+                else None
+            )
 
             planned_steps.append({
                 "id": index,
                 "description": step,
                 "status": "pending",
                 "depends_on": dependencies,
-                "result": None
+                "capability": capability,
+                "candidates": [
+                    item.name for item in candidates
+                ],
+                "result": None,
             })
 
         return {
             "goal": user_input,
-            "steps": planned_steps
+            "steps": planned_steps,
         }

@@ -6,6 +6,8 @@ from .router import Router
 from .executor import Executor
 from .verifier import Verifier
 from .explainer import Explainer
+from .planner import Planner
+from .orchestrator import Orchestrator
 from tools.registry import ToolRegistry, Tool
 from capabilities.capability import Capability
 from capabilities.registry import CapabilityRegistry
@@ -20,6 +22,26 @@ class Agent:
         self.executor = Executor()
         self.verifier = Verifier()
         self.explainer = Explainer()
+
+        self.planner = Planner(self.capabilities)
+
+        self.orchestrator = Orchestrator(
+            planner=self.planner,
+            router=self.router,
+            executor=self.executor,
+            verifier=self.verifier,
+            explainer=self.explainer
+        )
+
+        self.planner = Planner(self.capabilities)
+
+        self.orchestrator = Orchestrator(
+            planner=self.planner,
+            router=self.router,
+            executor=self.executor,
+            verifier=self.verifier,
+            explainer=self.explainer
+        )
 
     # =========================================================
     # TOOL REGISTRATION
