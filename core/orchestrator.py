@@ -10,34 +10,35 @@ class Orchestrator:
 
     def _arguments(self, capability, description, previous_results):
         text = description.strip()
+        prefixes = {
+            "calculate": "calculate ",
+            "simplify": "simplify ",
+            "factor": "factor ",
+            "expand": "expand ",
+            "derivative": "derivative ",
+            "integral": "integral ",
+            "definite_integral": "definite integral ",
+            "limit": "limit ",
+            "series": "series ",
+            "numerical": "numerical ",
+            "nth_derivative": "nth derivative ",
+            "solve_equation": "solve ",
+            "solve_system": "solve system ",
+            "matrix_determinant": "determinant ",
+            "matrix_inverse": "inverse ",
+            "matrix_rank": "rank ",
+            "run_python": "python ",
+        }
+        prefix = prefixes.get(capability, "")
+        expression = text[len(prefix):].strip() if prefix and text.lower().startswith(prefix) else text
 
-        if capability == "calculate":
-            expression = text
-            if expression.lower().startswith("calculate "):
-                expression = expression[10:].strip()
+        if capability == "solve_equation":
             return {"expression": expression}
 
-        if capability in {
-            "simplify",
-            "factor",
-            "expand",
-            "derivative",
-            "integral",
-            "definite_integral",
-            "limit",
-            "series",
-            "numerical",
-            "nth_derivative",
-            "solve_equation",
-            "solve_system",
-            "matrix_determinant",
-            "matrix_inverse",
-            "matrix_rank",
-            "run_python",
-        }:
-            return {"expression": text}
+        if capability == "solve_system":
+            return {"expression": expression}
 
-        return {"input": text}
+        return {"expression": expression}
 
     def run(self, user_input, tools):
         plan = self.planner.plan(user_input)
