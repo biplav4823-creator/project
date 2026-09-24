@@ -7,12 +7,15 @@ from .executor import Executor
 from .verifier import Verifier
 from .explainer import Explainer
 from tools.registry import ToolRegistry, Tool
+from capabilities.capability import Capability
+from capabilities.registry import CapabilityRegistry
 
 
 class Agent:
 
     def __init__(self):
         self.tools = ToolRegistry()
+        self.capabilities = CapabilityRegistry()
         self.router = Router()
         self.executor = Executor()
         self.verifier = Verifier()
@@ -23,11 +26,19 @@ class Agent:
     # =========================================================
 
     def register_tool(self, name, description, function):
-        self.tools.register(
-            Tool(
+        tool = Tool(
+            name=name,
+            description=description,
+            function=function
+        )
+
+        self.tools.register(tool)
+
+        self.capabilities.register(
+            Capability(
                 name=name,
                 description=description,
-                function=function
+                executor=lambda arguments: function(**arguments)
             )
         )
 
