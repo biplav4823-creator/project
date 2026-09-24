@@ -25,6 +25,9 @@ class Agent:
     # TOOL REGISTRATION
     # =========================================================
 
+    def discover_capabilities(self, query, limit=5):
+        return self.capabilities.discover(query, limit=limit)
+
     def register_tool(self, name, description, function):
         tool = Tool(
             name=name,
