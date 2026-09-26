@@ -97,6 +97,26 @@ class Orchestrator:
             else text
         )
 
+        if capability == "calculate":
+            patterns = [
+                (r"^multiply\s+(.+?)\s+by\s+(.+)$", r"\1 * \2"),
+                (r"^multiplied\s+(.+?)\s+by\s+(.+)$", r"\1 * \2"),
+                (r"^add\s+(.+?)\s+and\s+(.+)$", r"\1 + \2"),
+                (r"^add\s+(.+?)\s+to\s+(.+)$", r"\2 + \1"),
+                (r"^subtract\s+(.+?)\s+from\s+(.+)$", r"\2 - \1"),
+                (r"^divide\s+(.+?)\s+by\s+(.+)$", r"\1 / \2"),
+            ]
+            for pattern, replacement_expr in patterns:
+                match = re.match(pattern, expression, flags=re.I)
+                if match:
+                    expression = re.sub(
+                        pattern,
+                        replacement_expr,
+                        expression,
+                        flags=re.I,
+                    )
+                    break
+
         if capability == "solve_equation":
             return {"expression": expression}
 
