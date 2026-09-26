@@ -1,4 +1,3 @@
-import re
 from .capability import Capability
 
 
@@ -42,6 +41,46 @@ class CapabilityRegistry:
 
         # Ordered from most specific to most general.
         intents = [
+            (
+                "data_statistics",
+                (
+                    "data statistics",
+                    "descriptive statistics",
+                    "statistics of data",
+                    "summarize dataset",
+                    "summary statistics",
+                    "mean median standard deviation",
+                ),
+            ),
+            (
+                "data_correlation",
+                (
+                    "correlation",
+                    "correlation coefficient",
+                    "pearson correlation",
+                    "correlate",
+                ),
+            ),
+            (
+                "linear_regression",
+                (
+                    "linear regression",
+                    "regression line",
+                    "least squares regression",
+                    "fit a line",
+                    "fit linear model",
+                ),
+            ),
+            (
+                "dataset_profile",
+                (
+                    "profile dataset",
+                    "dataset profile",
+                    "data profile",
+                    "profile the data",
+                    "inspect dataset",
+                ),
+            ),
             (
                 "nth_derivative",
                 (

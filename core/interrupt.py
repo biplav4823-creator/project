@@ -1,5 +1,7 @@
-﻿from dataclasses import dataclass
+from dataclasses import dataclass
 from typing import Any
+
+from core.approval import Interrupt
 
 
 @dataclass(frozen=True)
@@ -116,10 +118,7 @@ class InterruptEngine:
         arguments,
         reason,
     ):
-        return __import__(
-            "core.approval",
-            fromlist=["Interrupt"],
-        ).Interrupt(
+        return Interrupt(
             name=name,
             phase=phase,
             reason=reason,

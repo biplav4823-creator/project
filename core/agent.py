@@ -34,17 +34,6 @@ class Agent:
             capabilities=self.capabilities
         )
 
-        self.planner = Planner(self.capabilities)
-
-        self.orchestrator = Orchestrator(
-            planner=self.planner,
-            router=self.router,
-            executor=self.executor,
-            verifier=self.verifier,
-            explainer=self.explainer,
-            capabilities=self.capabilities
-        )
-
     # =========================================================
     # TOOL REGISTRATION
     # =========================================================

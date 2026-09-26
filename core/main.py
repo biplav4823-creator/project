@@ -20,6 +20,7 @@ from tools.mathematics import (
 )
 
 from tools.python_tool import run_python
+from faculties.data_science import register_data_science
 
 
 def create_agent():
@@ -136,6 +137,12 @@ def create_agent():
         "Pandas, SymPy, statistics and data analysis.",
         run_python
     )
+
+    # ========================================================
+    # DATA SCIENCE FACULTY
+    # ========================================================
+
+    register_data_science(agent)
 
     return agent
 

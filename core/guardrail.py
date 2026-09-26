@@ -13,7 +13,7 @@ class Guardrail:
     Capability execution policy.
 
     CP-13 provides permission/risk enforcement.
-    CP-14 will add explicit human approval interrupts.
+    CP-14 adds explicit human approval interrupts.
     """
 
     BLOCKED_PERMISSIONS = {
