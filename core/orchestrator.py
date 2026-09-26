@@ -136,8 +136,104 @@ class Orchestrator:
                     )
                     break
 
-        if capability in {"solve_equation", "solve_system"}:
-            return {"expression": expression}
+        if capability in {"derivative", "nth_derivative"}:
+            expression = re.sub(
+                r"^\s*of\s+",
+                "",
+                expression,
+                flags=re.IGNORECASE,
+            )
+
+            variable = None
+            match = re.search(
+                r"\s+(?:with\s+respect\s+to|wrt)\s+([A-Za-z_]\w*)\s*$",
+                expression,
+                flags=re.IGNORECASE,
+            )
+
+            if match:
+                variable = match.group(1)
+                expression = expression[:match.start()].strip()
+
+            arguments = {"expression": expression}
+
+            if variable:
+                arguments["variable"] = variable
+
+            return arguments
+
+        if capability == "solve_equation":
+            expression = re.sub(
+                r"^\s*(?:the\s+)?equation\s+",
+                "",
+                expression,
+                flags=re.IGNORECASE,
+            )
+
+            variable = None
+            match = re.search(
+                r"\s+(?:for|with\s+respect\s+to|wrt)\s+([A-Za-z_]\w*)\s*$",
+                expression,
+                flags=re.IGNORECASE,
+            )
+
+            if match:
+                variable = match.group(1)
+                expression = expression[:match.start()].strip()
+
+            arguments = {"expression": expression}
+
+            if variable:
+                arguments["variable"] = variable
+
+            return arguments
+
+        if capability == "solve_system":
+            equations_text = re.sub(
+                r"^\s*(?:the\s+)?system\s+",
+                "",
+                expression,
+                flags=re.IGNORECASE,
+            )
+
+            equations = [
+                part.strip()
+                for part in re.split(
+                    r"\s+and\s+|,\s*",
+                    equations_text,
+                    flags=re.IGNORECASE,
+                )
+                if part.strip()
+            ]
+
+            if not equations:
+                raise ValueError("No equations found for solve_system.")
+
+            variables = sorted(
+                set(
+                    re.findall(
+                        r"\b[A-Za-z_]\w*\b",
+                        " ".join(equations),
+                    )
+                )
+            )
+
+            variables = [
+                value
+                for value in variables
+                if value.lower() not in {
+                    "and",
+                    "or",
+                    "the",
+                    "system",
+                    "solve",
+                }
+            ]
+
+            return {
+                "equations": ";".join(equations),
+                "variables": ",".join(variables),
+            }
 
         if capability in {
             "matrix_determinant",

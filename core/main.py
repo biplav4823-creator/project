@@ -79,13 +79,20 @@ def create_agent():
     agent.register_tool(
         "solve_equation",
         "Solve an algebraic equation.",
-        solve_equation
+        lambda expression, variable="x": str(
+            solve_equation(expression, variable)
+        ),
     )
 
     agent.register_tool(
         "solve_system",
         "Solve simultaneous equations.",
-        solve_system
+        lambda equations, variables: str(
+            solve_system(
+                [item.strip() for item in equations.split(";") if item.strip()],
+                [item.strip() for item in variables.split(",") if item.strip()],
+            )
+        ),
     )
 
     agent.register_tool(
