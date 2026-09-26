@@ -1,4 +1,4 @@
-﻿from dataclasses import dataclass, field
+from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from core.schema import validate
@@ -14,19 +14,19 @@ class Capability:
     cost: float = 0.0
     latency: float = 0.0
     risk: str = "low"
+    interrupts: list[str] = field(default_factory=list)
     executor: Callable[..., Any] | None = None
 
     def validate_input(self, arguments: dict[str, Any] | None = None):
-        validate(arguments or {}, self.input_schema)
+        arguments = arguments or {}
+        return validate(arguments, self.input_schema, f"Capability '{self.name}' input")
 
     def validate_output(self, result: Any):
-        validate(result, self.output_schema)
+        return validate(result, self.output_schema, f"Capability '{self.name}' output")
 
     def execute(self, arguments: dict[str, Any] | None = None):
         if self.executor is None:
-            raise RuntimeError(
-                f"Capability '{self.name}' has no executor."
-            )
+            raise RuntimeError(f"Capability '{self.name}' has no executor.")
 
         arguments = arguments or {}
         self.validate_input(arguments)

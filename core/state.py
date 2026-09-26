@@ -1,4 +1,4 @@
-﻿from dataclasses import dataclass, field
+from dataclasses import dataclass, field
 from typing import Any
 
 
@@ -17,15 +17,13 @@ class JobState:
     user_input: str
     goal: str
     plan: list[StepState] = field(default_factory=list)
-
     current_step: int | None = None
     completed_steps: list[int] = field(default_factory=list)
     failed_steps: list[int] = field(default_factory=list)
-
     intermediate_results: list[dict[str, Any]] = field(default_factory=list)
-
     execution_context: dict[str, Any] = field(default_factory=dict)
-
+    interrupts: list[Any] = field(default_factory=list)
+    approval: Any = None
     status: str = "created"
 
     def start(self):
@@ -43,8 +41,21 @@ class JobState:
 
         self.intermediate_results.append({
             "step": step_id,
-            "result": result
+            "result": result,
         })
+
+    def wait_for_approval(self, step_id: int, approval: Any):
+        for step in self.plan:
+            if step.id == step_id:
+                step.status = "waiting_approval"
+                step.result = approval
+                break
+
+        self.approval = approval
+        self.status = "waiting_approval"
+
+    def record_interrupts(self, interrupts):
+        self.interrupts.extend(interrupts)
 
     def fail_step(self, step_id: int, error: Any):
         for step in self.plan:
@@ -58,12 +69,15 @@ class JobState:
 
         self.intermediate_results.append({
             "step": step_id,
-            "error": error
+            "error": error,
         })
 
         self.status = "failed"
 
     def finish(self):
+        if self.status == "waiting_approval":
+            return
+
         if self.failed_steps:
             self.status = "failed"
         elif len(self.completed_steps) == len(self.plan):

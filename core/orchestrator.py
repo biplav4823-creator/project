@@ -1,19 +1,37 @@
-﻿import ast
+import ast
 import re
 
 from core.state import JobState, StepState
 from core.guardrail import Guardrail
+from core.approval import ApprovalGate
+from core.interrupt import InterruptEngine
 
 
 class Orchestrator:
-    def __init__(self, planner, router, executor, verifier, explainer, capabilities=None, guardrail=None):
+    def __init__(
+        self,
+        planner,
+        router,
+        executor,
+        verifier,
+        explainer,
+        capabilities=None,
+        guardrail=None,
+        interrupt_engine=None,
+        approval_gate=None,
+    ):
         self.planner = planner
         self.router = router
         self.executor = executor
         self.verifier = verifier
         self.explainer = explainer
         self.capabilities = capabilities
-        self.guardrail = guardrail or Guardrail()
+        self.guardrail = guardrail or Guardrail(
+            allow_medium=True,
+            allow_high=True,
+        )
+        self.interrupt_engine = interrupt_engine or InterruptEngine()
+        self.approval_gate = approval_gate or ApprovalGate()
 
     def _dependency_values(self, previous_results):
         values = {}
@@ -35,7 +53,6 @@ class Orchestrator:
 
     def _resolve_references(self, text, previous_results):
         values = self._dependency_values(previous_results)
-
         resolved = text
 
         for reference, value in values.items():
@@ -108,9 +125,9 @@ class Orchestrator:
                 (r"^subtract\s+(.+?)\s+from\s+(.+)$", r"\2 - \1"),
                 (r"^divide\s+(.+?)\s+by\s+(.+)$", r"\1 / \2"),
             ]
+
             for pattern, replacement_expr in patterns:
-                match = re.match(pattern, expression, flags=re.I)
-                if match:
+                if re.match(pattern, expression, flags=re.I):
                     expression = re.sub(
                         pattern,
                         replacement_expr,
@@ -119,10 +136,7 @@ class Orchestrator:
                     )
                     break
 
-        if capability == "solve_equation":
-            return {"expression": expression}
-
-        if capability == "solve_system":
+        if capability in {"solve_equation", "solve_system"}:
             return {"expression": expression}
 
         if capability in {
@@ -135,9 +149,7 @@ class Orchestrator:
             if not match:
                 raise ValueError("Matrix data not found in request.")
 
-            return {
-                "matrix": ast.literal_eval(match.group(0))
-            }
+            return {"matrix": ast.literal_eval(match.group(0))}
 
         return {"expression": expression}
 
@@ -178,7 +190,7 @@ class Orchestrator:
             if not capability:
                 state.fail_step(
                     step.id,
-                    "No capability found for: " + step.description
+                    "No capability found for: " + step.description,
                 )
                 break
 
@@ -209,10 +221,36 @@ class Orchestrator:
                 if self.capabilities is not None:
                     capability_contract = self.capabilities.get(route.tool)
                     capability_contract.validate_input(route.arguments)
+
                     self.guardrail.check(
                         capability_contract,
                         route.arguments,
                     )
+
+                    interrupt_result = self.interrupt_engine.pre_execution(
+                        capability_contract,
+                        step_id=step.id,
+                        arguments=route.arguments,
+                    )
+
+                    if interrupt_result.interrupts:
+                        state.record_interrupts(
+                            interrupt_result.interrupts
+                        )
+
+                    approval = self.approval_gate.evaluate(
+                        capability_contract,
+                        step_id=step.id,
+                        arguments=route.arguments,
+                        interrupts=interrupt_result.interrupts,
+                    )
+
+                    if approval.action != "allow":
+                        state.wait_for_approval(
+                            step.id,
+                            approval,
+                        )
+                        break
 
                 result = self.executor.execute(
                     tools,
@@ -224,6 +262,25 @@ class Orchestrator:
                     capability_contract.validate_output(result)
 
                 verified = self.verifier.verify(result)
+
+                if self.capabilities is not None:
+                    post_interrupt = self.interrupt_engine.post_execution(
+                        capability_contract,
+                        verified,
+                        step_id=step.id,
+                    )
+
+                    if post_interrupt.interrupts:
+                        state.record_interrupts(
+                            post_interrupt.interrupts
+                        )
+
+                    if post_interrupt.action != "continue":
+                        raise RuntimeError(
+                            "Post-execution interrupt: "
+                            + str(post_interrupt.interrupts)
+                        )
+
                 state.complete_step(step.id, verified)
 
             except Exception as exc:
