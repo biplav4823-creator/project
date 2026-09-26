@@ -415,10 +415,13 @@ class Orchestrator:
             ),
             interrupts=data.get("interrupts", []),
             approval=data.get("approval"),
-            recovery_attempts=data.get(
-                "recovery_attempts",
-                {},
-            ),
+            recovery_attempts={
+                int(k): v
+                for k, v in data.get(
+                    "recovery_attempts",
+                    {},
+                ).items()
+            },
             max_recovery_attempts=data.get(
                 "max_recovery_attempts",
                 1,
