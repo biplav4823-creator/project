@@ -22,6 +22,7 @@ from tools.mathematics import (
 from tools.python_tool import run_python
 from faculties.data_science import register_data_science
 from faculties.gen_ai import register_gen_ai
+from faculties.agentic_ops import register_agentic_ops
 from faculties.data_engineering import register_data_engineering
 
 
@@ -146,6 +147,7 @@ def create_agent():
 
     register_data_science(agent)
     register_gen_ai(agent)
+    register_agentic_ops(agent)
 
     # DATA ENGINEERING FACULTY
     register_data_engineering(agent)

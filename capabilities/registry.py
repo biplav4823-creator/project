@@ -41,6 +41,13 @@ class CapabilityRegistry:
 
         # Ordered from most specific to most general.
         intents = [
+            ("job_inspect", ("inspect job", "job status", "inspect execution", "execution status")),
+            ("plan_validate", ("validate plan", "validate workflow", "check plan dependencies", "plan validation")),
+            ("dependency_inspect", ("inspect dependencies", "dependency graph", "dependency analysis", "workflow dependencies")),
+            ("retry_policy", ("retry policy", "should retry", "retry decision", "retry operation")),
+            ("execution_summary", ("execution summary", "summarize execution", "job summary", "execution results")),
+            ("operational_diagnose", ("diagnose job", "diagnose execution", "operational diagnosis", "debug job")),
+
             ("prompt_construct", ("construct prompt", "build prompt", "create prompt", "prompt construction")),
             ("text_generate", ("generate text", "generate response", "write text", "text generation")),
             ("text_summarize", ("summarize text", "summarize", "make a summary", "text summary")),

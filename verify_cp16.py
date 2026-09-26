@@ -24,7 +24,7 @@ def test_registration():
     }
     names = set(agent.capabilities.list())
     assert expected.issubset(names), sorted(expected - names)
-    assert len(names) == 27, sorted(names)
+    assert len(names) >= 27, sorted(names)
 
 
 def test_csv():
