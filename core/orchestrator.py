@@ -441,6 +441,8 @@ class Orchestrator:
             state.plan,
         ):
             state.current_step = step.id
+            recovery_attempts = 0
+            max_recovery_attempts = 1
             self._record_event(
                 state,
                 "step_started",
@@ -690,6 +692,30 @@ class Orchestrator:
                 state.execution_context[
                     "recovery"
                 ] = recovery_result
+
+                if (
+                    recovery_result.get("action") == "retry"
+                    and recovery_attempts < max_recovery_attempts
+                ):
+                    recovery_attempts += 1
+
+                    state.execution_context[
+                        "recovery_attempts"
+                    ] = recovery_attempts
+
+                    self._record_event(
+                        state,
+                        "recovery_retry",
+                        step_id=step.id,
+                        payload={
+                            "attempt": recovery_attempts,
+                            "max_attempts": max_recovery_attempts,
+                            "reason": recovery_result.get("reason"),
+                        },
+                    )
+
+                    self._persist_state(state)
+                    continue
 
                 state.fail_step(
                     step.id,
