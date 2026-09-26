@@ -1,4 +1,4 @@
-﻿import ast
+import ast
 import re
 import uuid
 from dataclasses import asdict
@@ -440,6 +440,16 @@ class Orchestrator:
             plan["steps"],
             state.plan,
         ):
+            if step.id in state.completed_steps or step.status == "completed":
+                self._record_event(
+                    state,
+                    "step_skipped_on_resume",
+                    step_id=step.id,
+                    payload={"reason": "already_completed"},
+                )
+                self._persist_state(state)
+                continue
+
             state.current_step = step.id
             recovery_attempts = 0
             max_recovery_attempts = 1
