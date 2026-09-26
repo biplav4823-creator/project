@@ -1,4 +1,4 @@
-﻿import ast
+import ast
 import re
 import uuid
 from dataclasses import asdict
@@ -441,8 +441,8 @@ class Orchestrator:
             state.plan,
         ):
             state.current_step = step.id
-            recovery_attempts = 0
-            max_recovery_attempts = 1
+            recovery_attempts = state.recovery_attempts.get(step.id, 0)
+            max_recovery_attempts = state.max_recovery_attempts
             self._record_event(
                 state,
                 "step_started",
@@ -474,259 +474,262 @@ class Orchestrator:
                 self._persist_state(state)
                 break
 
-            try:
-                arguments = self._arguments(
-                    capability,
-                    step.description,
-                    deps,
-                )
-
-                decision = {
-                    "action": "tool",
-                    "tool": capability,
-                    "arguments": arguments,
-                    "description": step.description,
-                    "step_id": step.id,
-                    "depends_on": step.depends_on,
-                    "previous_results": deps,
-                }
-
-                route = self.router.route(
-                    decision
-                )
-
-                if (
-                    route.action != "tool"
-                    or not route.tool
-                ):
-                    raise RuntimeError(
-                        "Router did not select a tool for '"
-                        + step.description
-                        + "'"
+            while True:
+                try:
+                    arguments = self._arguments(
+                        capability,
+                        step.description,
+                        deps,
                     )
 
-                self._record_event(
-                    state,
-                    "capability_selected",
-                    step_id=step.id,
-                    payload={"capability": route.tool},
-                )
+                    decision = {
+                        "action": "tool",
+                        "tool": capability,
+                        "arguments": arguments,
+                        "description": step.description,
+                        "step_id": step.id,
+                        "depends_on": step.depends_on,
+                        "previous_results": deps,
+                    }
 
-                capability_contract = None
+                    route = self.router.route(
+                        decision
+                    )
 
-                if self.capabilities is not None:
-                    capability_contract = (
-                        self.capabilities.get(
-                            route.tool
+                    if (
+                        route.action != "tool"
+                        or not route.tool
+                    ):
+                        raise RuntimeError(
+                            "Router did not select a tool for '"
+                            + step.description
+                            + "'"
                         )
+
+                    self._record_event(
+                        state,
+                        "capability_selected",
+                        step_id=step.id,
+                        payload={"capability": route.tool},
                     )
 
-                    capability_contract.validate_input(
-                        route.arguments
+                    capability_contract = None
+
+                    if self.capabilities is not None:
+                        capability_contract = (
+                            self.capabilities.get(
+                                route.tool
+                            )
+                        )
+
+                        capability_contract.validate_input(
+                            route.arguments
+                        )
+
+                        self.guardrail.check(
+                            capability_contract,
+                            route.arguments,
+                        )
+
+                        self._record_event(
+                            state,
+                            "guardrail_checked",
+                            step_id=step.id,
+                            payload={
+                                "capability": route.tool,
+                                "outcome": "allow",
+                            },
+                        )
+
+                        interrupt_result = (
+                            self.interrupt_engine.pre_execution(
+                                capability_contract,
+                                step_id=step.id,
+                                arguments=route.arguments,
+                            )
+                        )
+
+                        if interrupt_result.interrupts:
+                            state.record_interrupts(
+                                interrupt_result.interrupts
+                            )
+
+                            self._persist_state(
+                                state
+                            )
+
+                        approval = (
+                            self.approval_gate.evaluate(
+                                capability_contract,
+                                step_id=step.id,
+                                arguments=route.arguments,
+                                interrupts=(
+                                    interrupt_result.interrupts
+                                ),
+                            )
+                        )
+
+                        if approval.action != "allow":
+                            self._record_event(
+                                state,
+                                "approval_requested",
+                                step_id=step.id,
+                                payload={
+                                    "action": approval.action,
+                                    "approval": str(approval),
+                                },
+                            )
+
+                            state.wait_for_approval(
+                                step.id,
+                                approval,
+                            )
+
+                            self._persist_state(
+                                state
+                            )
+
+                            break
+
+                    self._record_event(
+                        state,
+                        "execution_started",
+                        step_id=step.id,
+                        payload={"capability": route.tool},
                     )
 
-                    self.guardrail.check(
-                        capability_contract,
+                    result = self.executor.execute(
+                        tools,
+                        route.tool,
                         route.arguments,
                     )
 
                     self._record_event(
                         state,
-                        "guardrail_checked",
+                        "execution_completed",
                         step_id=step.id,
-                        payload={
-                            "capability": route.tool,
-                            "outcome": "allow",
-                        },
+                        payload={"capability": route.tool},
                     )
 
-                    interrupt_result = (
-                        self.interrupt_engine.pre_execution(
-                            capability_contract,
-                            step_id=step.id,
-                            arguments=route.arguments,
-                        )
-                    )
-
-                    if interrupt_result.interrupts:
-                        state.record_interrupts(
-                            interrupt_result.interrupts
+                    if capability_contract is not None:
+                        capability_contract.validate_output(
+                            result
                         )
 
-                        self._persist_state(
-                            state
-                        )
-
-                    approval = (
-                        self.approval_gate.evaluate(
-                            capability_contract,
-                            step_id=step.id,
-                            arguments=route.arguments,
-                            interrupts=(
-                                interrupt_result.interrupts
-                            ),
-                        )
-                    )
-
-                    if approval.action != "allow":
-                        self._record_event(
-                            state,
-                            "approval_requested",
-                            step_id=step.id,
-                            payload={
-                                "action": approval.action,
-                                "approval": str(approval),
-                            },
-                        )
-
-                        state.wait_for_approval(
-                            step.id,
-                            approval,
-                        )
-
-                        self._persist_state(
-                            state
-                        )
-
-                        break
-
-                self._record_event(
-                    state,
-                    "execution_started",
-                    step_id=step.id,
-                    payload={"capability": route.tool},
-                )
-
-                result = self.executor.execute(
-                    tools,
-                    route.tool,
-                    route.arguments,
-                )
-
-                self._record_event(
-                    state,
-                    "execution_completed",
-                    step_id=step.id,
-                    payload={"capability": route.tool},
-                )
-
-                if capability_contract is not None:
-                    capability_contract.validate_output(
+                    verified = self.verifier.verify(
                         result
                     )
 
-                verified = self.verifier.verify(
-                    result
-                )
-
-                self._record_event(
-                    state,
-                    "verification_completed",
-                    step_id=step.id,
-                    payload={"capability": route.tool},
-                )
-
-                if capability_contract is not None:
-                    post_interrupt = (
-                        self.interrupt_engine.post_execution(
-                            capability_contract,
-                            verified,
-                            step_id=step.id,
-                        )
+                    self._record_event(
+                        state,
+                        "verification_completed",
+                        step_id=step.id,
+                        payload={"capability": route.tool},
                     )
 
-                    if post_interrupt.interrupts:
-                        state.record_interrupts(
-                            post_interrupt.interrupts
-                        )
-
-                    if (
-                        post_interrupt.action
-                        != "continue"
-                    ):
-                        raise RuntimeError(
-                            "Post-execution interrupt: "
-                            + str(
-                                post_interrupt.interrupts
+                    if capability_contract is not None:
+                        post_interrupt = (
+                            self.interrupt_engine.post_execution(
+                                capability_contract,
+                                verified,
+                                step_id=step.id,
                             )
                         )
 
-                state.complete_step(
-                    step.id,
-                    verified,
-                )
+                        if post_interrupt.interrupts:
+                            state.record_interrupts(
+                                post_interrupt.interrupts
+                            )
 
-                self._update_context(
-                    step.id,
-                    verified,
-                )
+                        if (
+                            post_interrupt.action
+                            != "continue"
+                        ):
+                            raise RuntimeError(
+                                "Post-execution interrupt: "
+                                + str(
+                                    post_interrupt.interrupts
+                                )
+                            )
 
-                self._record_event(
-                    state,
-                    "step_completed",
-                    step_id=step.id,
-                    payload={"status": "completed"},
-                )
-
-                self._persist_state(
-                    state,
-                )
-
-            except Exception as exc:
-                recovery_result = (
-                    self.recovery.recover(
-                        exc
+                    state.complete_step(
+                        step.id,
+                        verified,
                     )
-                )
 
-                self._record_event(
-                    state,
-                    "recovery_attempted",
-                    step_id=step.id,
-                    payload={
-                        "error": str(exc),
-                        "recovery": str(recovery_result),
-                    },
-                )
-
-                state.execution_context[
-                    "recovery"
-                ] = recovery_result
-
-                if (
-                    recovery_result.get("action") == "retry"
-                    and recovery_attempts < max_recovery_attempts
-                ):
-                    recovery_attempts += 1
-
-                    state.execution_context[
-                        "recovery_attempts"
-                    ] = recovery_attempts
+                    self._update_context(
+                        step.id,
+                        verified,
+                    )
 
                     self._record_event(
                         state,
-                        "recovery_retry",
+                        "step_completed",
+                        step_id=step.id,
+                        payload={"status": "completed"},
+                    )
+
+                    self._persist_state(
+                        state,
+                    )
+                    break
+
+                except Exception as exc:
+                    recovery_result = (
+                        self.recovery.recover(
+                            exc
+                        )
+                    )
+
+                    self._record_event(
+                        state,
+                        "recovery_attempted",
                         step_id=step.id,
                         payload={
-                            "attempt": recovery_attempts,
-                            "max_attempts": max_recovery_attempts,
-                            "reason": recovery_result.get("reason"),
+                            "error": str(exc),
+                            "recovery": str(recovery_result),
                         },
                     )
 
-                    self._persist_state(state)
-                    continue
+                    state.execution_context[
+                        "recovery"
+                    ] = recovery_result
 
-                state.fail_step(
-                    step.id,
-                    str(exc),
-                )
+                    if (
+                        recovery_result.get("action") == "retry"
+                        and recovery_attempts < max_recovery_attempts
+                    ):
+                        recovery_attempts += 1
+                        state.recovery_attempts[step.id] = recovery_attempts
 
-                self._persist_state(
-                    state,
-                )
+                        state.execution_context[
+                            "recovery_attempts"
+                        ] = recovery_attempts
 
-                break
+                        self._record_event(
+                            state,
+                            "recovery_retry",
+                            step_id=step.id,
+                            payload={
+                                "attempt": recovery_attempts,
+                                "max_attempts": max_recovery_attempts,
+                                "reason": recovery_result.get("reason"),
+                            },
+                        )
+
+                        self._persist_state(state)
+                        continue
+
+                    state.fail_step(
+                        step.id,
+                        str(exc),
+                    )
+
+                    self._persist_state(
+                        state,
+                    )
+
+                    break
         state.current_step = None
         state.finish()
 
@@ -754,4 +757,3 @@ class Orchestrator:
         return self.explainer.explain(
             state
         )
-
