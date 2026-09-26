@@ -503,8 +503,11 @@ class Orchestrator:
                 continue
 
             state.current_step = step.id
-            recovery_attempts = 0
-            max_recovery_attempts = 1
+            recovery_attempts = state.recovery_attempts.get(
+                step.id,
+                0,
+            )
+            max_recovery_attempts = state.max_recovery_attempts
             self._record_event(
                 state,
                 "step_started",
