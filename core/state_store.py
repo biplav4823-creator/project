@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from datetime import datetime, timezone
 from typing import Any
 
 
@@ -21,10 +22,31 @@ class StateStore:
                 )
                 """
             )
+
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS execution_events (
+                    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_id TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    step_id INTEGER,
+                    timestamp TEXT NOT NULL,
+                    payload_json TEXT NOT NULL
+                )
+                """
+            )
+
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_execution_events_job_id
+                ON execution_events(job_id, event_id)
+                """
+            )
+
             connection.commit()
 
     def save(self, job_id: str, state: dict[str, Any]):
-        state_json = json.dumps(state)
+        state_json = json.dumps(state, default=str)
 
         with self._connect() as connection:
             connection.execute(
@@ -77,3 +99,66 @@ class StateStore:
             ).fetchone()
 
         return row is not None
+
+    def record_event(
+        self,
+        job_id: str,
+        event_type: str,
+        step_id: int | None = None,
+        payload: dict[str, Any] | None = None,
+    ):
+        timestamp = datetime.now(timezone.utc).isoformat()
+        payload_json = json.dumps(payload or {}, default=str)
+
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO execution_events (
+                    job_id,
+                    event_type,
+                    step_id,
+                    timestamp,
+                    payload_json
+                )
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    job_id,
+                    event_type,
+                    step_id,
+                    timestamp,
+                    payload_json,
+                )
+            )
+            connection.commit()
+            return cursor.lastrowid
+
+    def get_events(self, job_id: str):
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    event_id,
+                    job_id,
+                    event_type,
+                    step_id,
+                    timestamp,
+                    payload_json
+                FROM execution_events
+                WHERE job_id = ?
+                ORDER BY event_id ASC
+                """,
+                (job_id,)
+            ).fetchall()
+
+        return [
+            {
+                "event_id": row[0],
+                "job_id": row[1],
+                "event_type": row[2],
+                "step_id": row[3],
+                "timestamp": row[4],
+                "payload": json.loads(row[5]),
+            }
+            for row in rows
+        ]

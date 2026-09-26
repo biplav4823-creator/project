@@ -345,6 +345,14 @@ class Orchestrator:
     # STATE PERSISTENCE
     # =========================================================
 
+    def _record_event(self, state, event_type, step_id=None, payload=None):
+        self.state_store.record_event(
+            state.job_id,
+            event_type,
+            step_id=step_id,
+            payload=payload or {},
+        )
+
     def _persist_state(self, state):
         self.state_store.save(
             state.job_id,
@@ -407,6 +415,14 @@ class Orchestrator:
         )
 
         state.start()
+        self._record_event(
+            state,
+            "job_created",
+            payload={
+                "goal": state.goal,
+                "step_count": len(state.plan),
+            },
+        )
         self._persist_state(state)
 
         for raw, step in zip(
@@ -414,6 +430,15 @@ class Orchestrator:
             state.plan,
         ):
             state.current_step = step.id
+            self._record_event(
+                state,
+                "step_started",
+                step_id=step.id,
+                payload={
+                    "description": step.description,
+                    "depends_on": step.depends_on,
+                },
+            )
             self._persist_state(state)
 
             deps = [
@@ -467,6 +492,13 @@ class Orchestrator:
                         + "'"
                     )
 
+                self._record_event(
+                    state,
+                    "capability_selected",
+                    step_id=step.id,
+                    payload={"capability": route.tool},
+                )
+
                 capability_contract = None
 
                 if self.capabilities is not None:
@@ -483,6 +515,16 @@ class Orchestrator:
                     self.guardrail.check(
                         capability_contract,
                         route.arguments,
+                    )
+
+                    self._record_event(
+                        state,
+                        "guardrail_checked",
+                        step_id=step.id,
+                        payload={
+                            "capability": route.tool,
+                            "outcome": "allow",
+                        },
                     )
 
                     interrupt_result = (
@@ -514,6 +556,16 @@ class Orchestrator:
                     )
 
                     if approval.action != "allow":
+                        self._record_event(
+                            state,
+                            "approval_requested",
+                            step_id=step.id,
+                            payload={
+                                "action": approval.action,
+                                "approval": str(approval),
+                            },
+                        )
+
                         state.wait_for_approval(
                             step.id,
                             approval,
@@ -525,10 +577,24 @@ class Orchestrator:
 
                         break
 
+                self._record_event(
+                    state,
+                    "execution_started",
+                    step_id=step.id,
+                    payload={"capability": route.tool},
+                )
+
                 result = self.executor.execute(
                     tools,
                     route.tool,
                     route.arguments,
+                )
+
+                self._record_event(
+                    state,
+                    "execution_completed",
+                    step_id=step.id,
+                    payload={"capability": route.tool},
                 )
 
                 if capability_contract is not None:
@@ -538,6 +604,13 @@ class Orchestrator:
 
                 verified = self.verifier.verify(
                     result
+                )
+
+                self._record_event(
+                    state,
+                    "verification_completed",
+                    step_id=step.id,
+                    payload={"capability": route.tool},
                 )
 
                 if capability_contract is not None:
@@ -575,6 +648,13 @@ class Orchestrator:
                     verified,
                 )
 
+                self._record_event(
+                    state,
+                    "step_completed",
+                    step_id=step.id,
+                    payload={"status": "completed"},
+                )
+
                 self._persist_state(
                     state,
                 )
@@ -584,6 +664,16 @@ class Orchestrator:
                     self.recovery.recover(
                         exc
                     )
+                )
+
+                self._record_event(
+                    state,
+                    "recovery_attempted",
+                    step_id=step.id,
+                    payload={
+                        "error": str(exc),
+                        "recovery": str(recovery_result),
+                    },
                 )
 
                 state.execution_context[
@@ -600,11 +690,31 @@ class Orchestrator:
                 )
 
                 break
-
         state.current_step = None
         state.finish()
-        self._persist_state(state)
 
+        terminal_events = {
+            'completed': 'job_completed',
+            'failed': 'job_failed',
+            'waiting_approval': 'approval_requested',
+            'pending': 'job_pending',
+        }
+
+        terminal_event = terminal_events.get(state.status)
+
+        if terminal_event is not None:
+            self._record_event(
+                state,
+                terminal_event,
+                payload={
+                    'status': state.status,
+                    'completed_steps': state.completed_steps,
+                    'failed_steps': state.failed_steps,
+                },
+            )
+
+        self._persist_state(state)
         return self.explainer.explain(
             state
         )
+
