@@ -380,6 +380,17 @@ class Orchestrator:
         )
 
     # =========================================================
+    # EXECUTION HISTORY
+    # =========================================================
+
+    def get_execution_history(self, job_id):
+        """Return the recorded execution events for a job."""
+        if not job_id:
+            return []
+
+        return self.state_store.get_events(job_id)
+
+    # =========================================================
     # MAIN EXECUTION
     # =========================================================
 

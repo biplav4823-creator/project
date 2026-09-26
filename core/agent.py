@@ -493,6 +493,14 @@ Rules:
         }
 
     # =========================================================
+    # EXECUTION HISTORY
+    # =========================================================
+
+    def get_execution_history(self, job_id):
+        """Return the execution history for a job."""
+        return self.orchestrator.get_execution_history(job_id)
+
+    # =========================================================
     # MAIN EXECUTION
     # =========================================================
 
