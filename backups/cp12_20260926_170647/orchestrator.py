@@ -5,13 +5,12 @@ from core.state import JobState, StepState
 
 
 class Orchestrator:
-    def __init__(self, planner, router, executor, verifier, explainer, capabilities=None):
+    def __init__(self, planner, router, executor, verifier, explainer):
         self.planner = planner
         self.router = router
         self.executor = executor
         self.verifier = verifier
         self.explainer = explainer
-        self.capabilities = capabilities
 
     def _dependency_values(self, previous_results):
         values = {}
@@ -184,18 +183,11 @@ class Orchestrator:
                         f"Router did not select a tool for '{step.description}'"
                     )
 
-                if self.capabilities is not None:
-                    capability_contract = self.capabilities.get(route.tool)
-                    capability_contract.validate_input(route.arguments)
-
                 result = self.executor.execute(
                     tools,
                     route.tool,
                     route.arguments,
                 )
-
-                if self.capabilities is not None:
-                    capability_contract.validate_output(result)
 
                 verified = self.verifier.verify(result)
                 state.complete_step(step.id, verified)

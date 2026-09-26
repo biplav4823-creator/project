@@ -1,8 +1,6 @@
 ﻿from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from core.schema import validate
-
 
 @dataclass
 class Capability:
@@ -16,20 +14,10 @@ class Capability:
     risk: str = "low"
     executor: Callable[..., Any] | None = None
 
-    def validate_input(self, arguments: dict[str, Any] | None = None):
-        validate(arguments or {}, self.input_schema)
-
-    def validate_output(self, result: Any):
-        validate(result, self.output_schema)
-
     def execute(self, arguments: dict[str, Any] | None = None):
         if self.executor is None:
             raise RuntimeError(
                 f"Capability '{self.name}' has no executor."
             )
 
-        arguments = arguments or {}
-        self.validate_input(arguments)
-        result = self.executor(arguments)
-        self.validate_output(result)
-        return result
+        return self.executor(arguments or {})

@@ -30,8 +30,7 @@ class Agent:
             router=self.router,
             executor=self.executor,
             verifier=self.verifier,
-            explainer=self.explainer,
-            capabilities=self.capabilities
+            explainer=self.explainer
         )
 
         self.planner = Planner(self.capabilities)
@@ -41,8 +40,7 @@ class Agent:
             router=self.router,
             executor=self.executor,
             verifier=self.verifier,
-            explainer=self.explainer,
-            capabilities=self.capabilities
+            explainer=self.explainer
         )
 
     # =========================================================
@@ -52,18 +50,7 @@ class Agent:
     def discover_capabilities(self, query, limit=5):
         return self.capabilities.discover(query, limit=limit)
 
-    def register_tool(
-        self,
-        name,
-        description,
-        function,
-        input_schema=None,
-        output_schema=None,
-        permissions=None,
-        risk="low",
-    ):
-        import inspect
-
+    def register_tool(self, name, description, function):
         tool = Tool(
             name=name,
             description=description,
@@ -72,84 +59,10 @@ class Agent:
 
         self.tools.register(tool)
 
-        if input_schema is None:
-            properties = {}
-            required = []
-
-            for parameter in inspect.signature(function).parameters.values():
-                parameter_type = "string"
-
-                if parameter.name == "matrix":
-                    parameter_type = "array"
-                    properties[parameter.name] = {
-                        "type": "array",
-                        "items": {
-                            "type": "array",
-                            "items": {
-                                "type": "number"
-                            }
-                        }
-                    }
-                elif parameter.annotation is int:
-                    parameter_type = "integer"
-                    properties[parameter.name] = {
-                        "type": parameter_type
-                    }
-                elif parameter.annotation is float:
-                    parameter_type = "number"
-                    properties[parameter.name] = {
-                        "type": parameter_type
-                    }
-                elif parameter.annotation is bool:
-                    parameter_type = "boolean"
-                    properties[parameter.name] = {
-                        "type": parameter_type
-                    }
-                elif parameter.annotation is dict:
-                    parameter_type = "object"
-                    properties[parameter.name] = {
-                        "type": parameter_type
-                    }
-                elif parameter.annotation is list:
-                    parameter_type = "array"
-                    properties[parameter.name] = {
-                        "type": parameter_type
-                    }
-                else:
-                    properties[parameter.name] = {
-                        "type": parameter_type
-                    }
-
-                if (
-                    parameter.default is inspect.Parameter.empty
-                    and parameter.kind
-                    in {
-                        inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                        inspect.Parameter.KEYWORD_ONLY,
-                    }
-                ):
-                    required.append(parameter.name)
-
-            input_schema = {
-                "type": "object",
-                "properties": properties,
-                "required": required,
-                "additionalProperties": False,
-            }
-
-        if output_schema is None:
-            output_schema = {
-                "type": "string"
-            }
-
         self.capabilities.register(
             Capability(
                 name=name,
                 description=description,
-                input_schema=input_schema,
-                output_schema=output_schema,
-                permissions=permissions or [],
-                risk=risk,
                 executor=lambda arguments: function(**arguments)
             )
         )
