@@ -390,6 +390,8 @@ class Orchestrator:
                 description=s["description"],
                 status=s.get("status", "pending"),
                 depends_on=s.get("depends_on", []),
+                capability=s.get("capability"),
+                candidates=s.get("candidates", []),
                 result=s.get("result"),
             )
             for s in data.get("plan", [])
@@ -434,6 +436,56 @@ class Orchestrator:
     # =========================================================
     # MAIN EXECUTION
     # =========================================================
+
+    def resume(self, job_id, tools):
+        data = self.state_store.load(job_id)
+
+        if data is None:
+            raise ValueError(
+                f"No persisted job found for job_id: {job_id}"
+            )
+
+        state = self._state_from_dict(data)
+
+        if state.status == "completed":
+            return self.explainer.explain(state)
+
+        if state.status == "waiting_approval":
+            return self.explainer.explain(state)
+
+        state.status = "running"
+
+        plan = {
+            "goal": state.goal,
+            "steps": [
+                {
+                    "id": step.id,
+                    "description": step.description,
+                    "status": step.status,
+                    "depends_on": step.depends_on,
+                    "capability": step.capability,
+                    "candidates": step.candidates,
+                    "result": step.result,
+                }
+                for step in state.plan
+            ],
+        }
+
+        self._record_event(
+            state,
+            "job_resumed",
+            payload={
+                "completed_steps": state.completed_steps,
+                "current_step": state.current_step,
+            },
+        )
+        self._persist_state(state)
+
+        return self._execute_state(
+            state,
+            plan,
+            tools,
+        )
 
     def _execute_state(self, state, plan, tools):
         for raw, step in zip(
@@ -783,6 +835,8 @@ class Orchestrator:
                     "depends_on",
                     [],
                 ),
+                capability=s.get("capability"),
+                candidates=s.get("candidates", []),
                 result=s.get(
                     "result"
                 ),

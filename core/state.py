@@ -8,6 +8,8 @@ class StepState:
     description: str
     status: str = "pending"
     depends_on: list[int] = field(default_factory=list)
+    capability: str | None = None
+    candidates: list[str] = field(default_factory=list)
     result: Any = None
 
 
