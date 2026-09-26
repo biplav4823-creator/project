@@ -1,4 +1,8 @@
+import ast
+import re
+
 from core.state import JobState, StepState
+
 
 class Orchestrator:
     def __init__(self, planner, router, executor, verifier, explainer):
@@ -10,6 +14,7 @@ class Orchestrator:
 
     def _arguments(self, capability, description, previous_results):
         text = description.strip()
+
         prefixes = {
             "calculate": "calculate ",
             "simplify": "simplify ",
@@ -29,14 +34,33 @@ class Orchestrator:
             "matrix_rank": "rank ",
             "run_python": "python ",
         }
+
         prefix = prefixes.get(capability, "")
-        expression = text[len(prefix):].strip() if prefix and text.lower().startswith(prefix) else text
+        expression = (
+            text[len(prefix):].strip()
+            if prefix and text.lower().startswith(prefix)
+            else text
+        )
 
         if capability == "solve_equation":
             return {"expression": expression}
 
         if capability == "solve_system":
             return {"expression": expression}
+
+        if capability in {
+            "matrix_determinant",
+            "matrix_inverse",
+            "matrix_rank",
+        }:
+            match = re.search(r"\[\[.*?\]\]", text)
+
+            if not match:
+                raise ValueError("Matrix data not found in request.")
+
+            return {
+                "matrix": ast.literal_eval(match.group(0))
+            }
 
         return {"expression": expression}
 
@@ -67,7 +91,8 @@ class Orchestrator:
             state.current_step = step.id
 
             deps = [
-                x for x in state.intermediate_results
+                x
+                for x in state.intermediate_results
                 if x.get("step") in step.depends_on
             ]
 

@@ -84,6 +84,7 @@ class CapabilityRegistry:
                 (
                     "matrix inverse",
                     "inverse of a matrix",
+                    "inverse of matrix",
                     "invert matrix",
                 ),
             ),
@@ -92,6 +93,7 @@ class CapabilityRegistry:
                 (
                     "matrix rank",
                     "rank of a matrix",
+                    "rank of matrix",
                 ),
             ),
             (
