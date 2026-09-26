@@ -383,6 +383,47 @@ class Orchestrator:
     # EXECUTION HISTORY
     # =========================================================
 
+    def _state_from_dict(self, data):
+        plan = [
+            StepState(
+                id=s["id"],
+                description=s["description"],
+                status=s.get("status", "pending"),
+                depends_on=s.get("depends_on", []),
+                result=s.get("result"),
+            )
+            for s in data.get("plan", [])
+        ]
+
+        return JobState(
+            job_id=data["job_id"],
+            user_input=data["user_input"],
+            goal=data["goal"],
+            plan=plan,
+            current_step=data.get("current_step"),
+            completed_steps=data.get("completed_steps", []),
+            failed_steps=data.get("failed_steps", []),
+            intermediate_results=data.get(
+                "intermediate_results",
+                [],
+            ),
+            execution_context=data.get(
+                "execution_context",
+                {},
+            ),
+            interrupts=data.get("interrupts", []),
+            approval=data.get("approval"),
+            recovery_attempts=data.get(
+                "recovery_attempts",
+                {},
+            ),
+            max_recovery_attempts=data.get(
+                "max_recovery_attempts",
+                1,
+            ),
+            status=data.get("status", "created"),
+        )
+
     def get_execution_history(self, job_id):
         """Return the recorded execution events for a job."""
         if not job_id:
