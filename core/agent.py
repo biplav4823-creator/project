@@ -504,5 +504,11 @@ Rules:
     # MAIN EXECUTION
     # =========================================================
 
+    def resume(self, job_id):
+        return self.orchestrator.resume(
+            job_id,
+            self.tools,
+        )
+
     def run(self, user_input):
         return self.orchestrator.run(user_input, self.tools)
