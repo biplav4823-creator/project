@@ -24,6 +24,8 @@ class JobState:
     execution_context: dict[str, Any] = field(default_factory=dict)
     interrupts: list[Any] = field(default_factory=list)
     approval: Any = None
+    recovery_attempts: dict[int, int] = field(default_factory=dict)
+    max_recovery_attempts: int = 1
     status: str = "created"
 
     def start(self):
