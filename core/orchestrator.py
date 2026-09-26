@@ -2,16 +2,18 @@
 import re
 
 from core.state import JobState, StepState
+from core.guardrail import Guardrail
 
 
 class Orchestrator:
-    def __init__(self, planner, router, executor, verifier, explainer, capabilities=None):
+    def __init__(self, planner, router, executor, verifier, explainer, capabilities=None, guardrail=None):
         self.planner = planner
         self.router = router
         self.executor = executor
         self.verifier = verifier
         self.explainer = explainer
         self.capabilities = capabilities
+        self.guardrail = guardrail or Guardrail()
 
     def _dependency_values(self, previous_results):
         values = {}
@@ -207,6 +209,10 @@ class Orchestrator:
                 if self.capabilities is not None:
                     capability_contract = self.capabilities.get(route.tool)
                     capability_contract.validate_input(route.arguments)
+                    self.guardrail.check(
+                        capability_contract,
+                        route.arguments,
+                    )
 
                 result = self.executor.execute(
                     tools,
