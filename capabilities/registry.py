@@ -41,6 +41,45 @@ class CapabilityRegistry:
 
         # Ordered from most specific to most general.
         intents = [
+            ("csv_parse", (
+                "parse csv data",
+                "parse csv",
+                "read csv",
+                "csv parsing",
+            )),
+            ("csv_serialize", (
+                "serialize records to csv",
+                "serialize to csv",
+                "write csv",
+                "csv serialization",
+            )),
+            ("schema_inspect", (
+                "inspect dataset schema",
+                "inspect schema",
+                "schema inspection",
+                "infer schema",
+            )),
+            ("data_validate", (
+                "validate data against schema",
+                "validate dataset",
+                "validate records",
+                "data validation",
+            )),
+            ("data_transform", (
+                "transform records",
+                "transform data",
+                "data transformation",
+                "filter records",
+                "rename columns",
+            )),
+            ("data_aggregate", (
+                "aggregate data",
+                "aggregate records",
+                "group and aggregate",
+                "group by data",
+                "data aggregation",
+            )),
+
             (
                 "data_statistics",
                 (
