@@ -1,10 +1,15 @@
-import ast
+﻿import ast
 import re
+import uuid
+from dataclasses import asdict
 
 from core.state import JobState, StepState
 from core.guardrail import Guardrail
 from core.approval import ApprovalGate
 from core.interrupt import InterruptEngine
+from core.recovery import Recovery
+from core.state_store import StateStore
+from core.context import Context
 
 
 class Orchestrator:
@@ -19,6 +24,9 @@ class Orchestrator:
         guardrail=None,
         interrupt_engine=None,
         approval_gate=None,
+        recovery=None,
+        state_store=None,
+        context=None,
     ):
         self.planner = planner
         self.router = router
@@ -26,12 +34,27 @@ class Orchestrator:
         self.verifier = verifier
         self.explainer = explainer
         self.capabilities = capabilities
+
         self.guardrail = guardrail or Guardrail(
             allow_medium=True,
             allow_high=True,
         )
-        self.interrupt_engine = interrupt_engine or InterruptEngine()
-        self.approval_gate = approval_gate or ApprovalGate()
+
+        self.interrupt_engine = (
+            interrupt_engine or InterruptEngine()
+        )
+
+        self.approval_gate = (
+            approval_gate or ApprovalGate()
+        )
+
+        self.recovery = recovery or Recovery()
+        self.state_store = state_store or StateStore()
+        self.context = context or Context()
+
+    # =========================================================
+    # DEPENDENCY VALUES
+    # =========================================================
 
     def _dependency_values(self, previous_results):
         values = {}
@@ -51,12 +74,19 @@ class Orchestrator:
 
         return values
 
+    # =========================================================
+    # REFERENCE RESOLUTION
+    # =========================================================
+
     def _resolve_references(self, text, previous_results):
         values = self._dependency_values(previous_results)
         resolved = text
 
         for reference, value in values.items():
-            resolved = resolved.replace(reference, str(value))
+            resolved = resolved.replace(
+                reference,
+                str(value),
+            )
 
         if previous_results:
             latest = previous_results[-1].get("result")
@@ -83,7 +113,16 @@ class Orchestrator:
 
         return resolved
 
-    def _arguments(self, capability, description, previous_results):
+    # =========================================================
+    # ARGUMENT PARSING
+    # =========================================================
+
+    def _arguments(
+        self,
+        capability,
+        description,
+        previous_results,
+    ):
         text = self._resolve_references(
             description.strip(),
             previous_results,
@@ -109,25 +148,52 @@ class Orchestrator:
             "run_python": "python ",
         }
 
-        prefix = prefixes.get(capability, "")
+        prefix = prefixes.get(
+            capability,
+            "",
+        )
+
         expression = (
             text[len(prefix):].strip()
-            if prefix and text.lower().startswith(prefix)
+            if prefix
+            and text.lower().startswith(prefix)
             else text
         )
 
         if capability == "calculate":
             patterns = [
-                (r"^multiply\s+(.+?)\s+by\s+(.+)$", r"\1 * \2"),
-                (r"^multiplied\s+(.+?)\s+by\s+(.+)$", r"\1 * \2"),
-                (r"^add\s+(.+?)\s+and\s+(.+)$", r"\1 + \2"),
-                (r"^add\s+(.+?)\s+to\s+(.+)$", r"\2 + \1"),
-                (r"^subtract\s+(.+?)\s+from\s+(.+)$", r"\2 - \1"),
-                (r"^divide\s+(.+?)\s+by\s+(.+)$", r"\1 / \2"),
+                (
+                    r"^multiply\s+(.+?)\s+by\s+(.+)$",
+                    r"\1 * \2",
+                ),
+                (
+                    r"^multiplied\s+(.+?)\s+by\s+(.+)$",
+                    r"\1 * \2",
+                ),
+                (
+                    r"^add\s+(.+?)\s+and\s+(.+)$",
+                    r"\1 + \2",
+                ),
+                (
+                    r"^add\s+(.+?)\s+to\s+(.+)$",
+                    r"\2 + \1",
+                ),
+                (
+                    r"^subtract\s+(.+?)\s+from\s+(.+)$",
+                    r"\2 - \1",
+                ),
+                (
+                    r"^divide\s+(.+?)\s+by\s+(.+)$",
+                    r"\1 / \2",
+                ),
             ]
 
             for pattern, replacement_expr in patterns:
-                if re.match(pattern, expression, flags=re.I):
+                if re.match(
+                    pattern,
+                    expression,
+                    flags=re.I,
+                ):
                     expression = re.sub(
                         pattern,
                         replacement_expr,
@@ -136,26 +202,34 @@ class Orchestrator:
                     )
                     break
 
-        if capability in {"derivative", "nth_derivative"}:
+        if capability in {
+            "derivative",
+            "nth_derivative",
+        }:
             expression = re.sub(
                 r"^\s*of\s+",
                 "",
                 expression,
-                flags=re.IGNORECASE,
+                flags=re.I,
             )
 
             variable = None
+
             match = re.search(
                 r"\s+(?:with\s+respect\s+to|wrt)\s+([A-Za-z_]\w*)\s*$",
                 expression,
-                flags=re.IGNORECASE,
+                flags=re.I,
             )
 
             if match:
                 variable = match.group(1)
-                expression = expression[:match.start()].strip()
+                expression = expression[
+                    :match.start()
+                ].strip()
 
-            arguments = {"expression": expression}
+            arguments = {
+                "expression": expression
+            }
 
             if variable:
                 arguments["variable"] = variable
@@ -167,21 +241,26 @@ class Orchestrator:
                 r"^\s*(?:the\s+)?equation\s+",
                 "",
                 expression,
-                flags=re.IGNORECASE,
+                flags=re.I,
             )
 
             variable = None
+
             match = re.search(
                 r"\s+(?:for|with\s+respect\s+to|wrt)\s+([A-Za-z_]\w*)\s*$",
                 expression,
-                flags=re.IGNORECASE,
+                flags=re.I,
             )
 
             if match:
                 variable = match.group(1)
-                expression = expression[:match.start()].strip()
+                expression = expression[
+                    :match.start()
+                ].strip()
 
-            arguments = {"expression": expression}
+            arguments = {
+                "expression": expression
+            }
 
             if variable:
                 arguments["variable"] = variable
@@ -193,7 +272,7 @@ class Orchestrator:
                 r"^\s*(?:the\s+)?system\s+",
                 "",
                 expression,
-                flags=re.IGNORECASE,
+                flags=re.I,
             )
 
             equations = [
@@ -201,13 +280,15 @@ class Orchestrator:
                 for part in re.split(
                     r"\s+and\s+|,\s*",
                     equations_text,
-                    flags=re.IGNORECASE,
+                    flags=re.I,
                 )
                 if part.strip()
             ]
 
             if not equations:
-                raise ValueError("No equations found for solve_system.")
+                raise ValueError(
+                    "No equations found for solve_system."
+                )
 
             variables = sorted(
                 set(
@@ -240,54 +321,119 @@ class Orchestrator:
             "matrix_inverse",
             "matrix_rank",
         }:
-            match = re.search(r"\[\[.*?\]\]", text)
+            match = re.search(
+                r"\[\[.*?\]\]",
+                text,
+            )
 
             if not match:
-                raise ValueError("Matrix data not found in request.")
+                raise ValueError(
+                    "Matrix data not found in request."
+                )
 
-            return {"matrix": ast.literal_eval(match.group(0))}
+            return {
+                "matrix": ast.literal_eval(
+                    match.group(0)
+                )
+            }
 
-        return {"expression": expression}
+        return {
+            "expression": expression
+        }
+
+    # =========================================================
+    # STATE PERSISTENCE
+    # =========================================================
+
+    def _persist_state(self, state):
+        self.state_store.save(
+            state.job_id,
+            asdict(state),
+        )
+
+    # =========================================================
+    # CONTEXT UPDATE
+    # =========================================================
+
+    def _update_context(self, step_id, result):
+        self.context.set(
+            f"step{step_id}",
+            result,
+        )
+
+        self.context.set(
+            f"step{step_id}.result",
+            result,
+        )
+
+        self.context.set(
+            "last_result",
+            result,
+        )
+
+    # =========================================================
+    # MAIN EXECUTION
+    # =========================================================
 
     def run(self, user_input, tools):
-        plan = self.planner.plan(user_input)
+        plan = self.planner.plan(
+            user_input
+        )
 
         steps = [
             StepState(
                 id=s["id"],
                 description=s["description"],
-                status=s.get("status", "pending"),
-                depends_on=s.get("depends_on", []),
-                result=s.get("result"),
+                status=s.get(
+                    "status",
+                    "pending",
+                ),
+                depends_on=s.get(
+                    "depends_on",
+                    [],
+                ),
+                result=s.get(
+                    "result"
+                ),
             )
             for s in plan["steps"]
         ]
 
         state = JobState(
-            job_id="local-job",
+            job_id=f"job-{uuid.uuid4().hex[:12]}",
             user_input=user_input,
             goal=plan["goal"],
             plan=steps,
         )
 
         state.start()
+        self._persist_state(state)
 
-        for raw, step in zip(plan["steps"], state.plan):
+        for raw, step in zip(
+            plan["steps"],
+            state.plan,
+        ):
             state.current_step = step.id
+            self._persist_state(state)
 
             deps = [
                 x
                 for x in state.intermediate_results
-                if x.get("step") in step.depends_on
+                if x.get("step")
+                in step.depends_on
             ]
 
-            capability = raw.get("capability")
+            capability = raw.get(
+                "capability"
+            )
 
             if not capability:
                 state.fail_step(
                     step.id,
-                    "No capability found for: " + step.description,
+                    "No capability found for: "
+                    + step.description,
                 )
+                self._persist_state(state)
                 break
 
             try:
@@ -307,26 +453,44 @@ class Orchestrator:
                     "previous_results": deps,
                 }
 
-                route = self.router.route(decision)
+                route = self.router.route(
+                    decision
+                )
 
-                if route.action != "tool" or not route.tool:
+                if (
+                    route.action != "tool"
+                    or not route.tool
+                ):
                     raise RuntimeError(
-                        f"Router did not select a tool for '{step.description}'"
+                        "Router did not select a tool for '"
+                        + step.description
+                        + "'"
                     )
 
+                capability_contract = None
+
                 if self.capabilities is not None:
-                    capability_contract = self.capabilities.get(route.tool)
-                    capability_contract.validate_input(route.arguments)
+                    capability_contract = (
+                        self.capabilities.get(
+                            route.tool
+                        )
+                    )
+
+                    capability_contract.validate_input(
+                        route.arguments
+                    )
 
                     self.guardrail.check(
                         capability_contract,
                         route.arguments,
                     )
 
-                    interrupt_result = self.interrupt_engine.pre_execution(
-                        capability_contract,
-                        step_id=step.id,
-                        arguments=route.arguments,
+                    interrupt_result = (
+                        self.interrupt_engine.pre_execution(
+                            capability_contract,
+                            step_id=step.id,
+                            arguments=route.arguments,
+                        )
                     )
 
                     if interrupt_result.interrupts:
@@ -334,11 +498,19 @@ class Orchestrator:
                             interrupt_result.interrupts
                         )
 
-                    approval = self.approval_gate.evaluate(
-                        capability_contract,
-                        step_id=step.id,
-                        arguments=route.arguments,
-                        interrupts=interrupt_result.interrupts,
+                        self._persist_state(
+                            state
+                        )
+
+                    approval = (
+                        self.approval_gate.evaluate(
+                            capability_contract,
+                            step_id=step.id,
+                            arguments=route.arguments,
+                            interrupts=(
+                                interrupt_result.interrupts
+                            ),
+                        )
                     )
 
                     if approval.action != "allow":
@@ -346,6 +518,11 @@ class Orchestrator:
                             step.id,
                             approval,
                         )
+
+                        self._persist_state(
+                            state
+                        )
+
                         break
 
                 result = self.executor.execute(
@@ -354,16 +531,22 @@ class Orchestrator:
                     route.arguments,
                 )
 
-                if self.capabilities is not None:
-                    capability_contract.validate_output(result)
+                if capability_contract is not None:
+                    capability_contract.validate_output(
+                        result
+                    )
 
-                verified = self.verifier.verify(result)
+                verified = self.verifier.verify(
+                    result
+                )
 
-                if self.capabilities is not None:
-                    post_interrupt = self.interrupt_engine.post_execution(
-                        capability_contract,
-                        verified,
-                        step_id=step.id,
+                if capability_contract is not None:
+                    post_interrupt = (
+                        self.interrupt_engine.post_execution(
+                            capability_contract,
+                            verified,
+                            step_id=step.id,
+                        )
                     )
 
                     if post_interrupt.interrupts:
@@ -371,19 +554,57 @@ class Orchestrator:
                             post_interrupt.interrupts
                         )
 
-                    if post_interrupt.action != "continue":
+                    if (
+                        post_interrupt.action
+                        != "continue"
+                    ):
                         raise RuntimeError(
                             "Post-execution interrupt: "
-                            + str(post_interrupt.interrupts)
+                            + str(
+                                post_interrupt.interrupts
+                            )
                         )
 
-                state.complete_step(step.id, verified)
+                state.complete_step(
+                    step.id,
+                    verified,
+                )
+
+                self._update_context(
+                    step.id,
+                    verified,
+                )
+
+                self._persist_state(
+                    state,
+                )
 
             except Exception as exc:
-                state.fail_step(step.id, str(exc))
+                recovery_result = (
+                    self.recovery.recover(
+                        exc
+                    )
+                )
+
+                state.execution_context[
+                    "recovery"
+                ] = recovery_result
+
+                state.fail_step(
+                    step.id,
+                    str(exc),
+                )
+
+                self._persist_state(
+                    state,
+                )
+
                 break
 
         state.current_step = None
         state.finish()
+        self._persist_state(state)
 
-        return self.explainer.explain(state)
+        return self.explainer.explain(
+            state
+        )

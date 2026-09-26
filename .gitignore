@@ -23,3 +23,5 @@ artifacts/
 
 .vscode/
 .idea/
+
+jarvis_state.db
