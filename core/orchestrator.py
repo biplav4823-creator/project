@@ -435,48 +435,7 @@ class Orchestrator:
     # MAIN EXECUTION
     # =========================================================
 
-    def run(self, user_input, tools):
-        plan = self.planner.plan(
-            user_input
-        )
-
-        steps = [
-            StepState(
-                id=s["id"],
-                description=s["description"],
-                status=s.get(
-                    "status",
-                    "pending",
-                ),
-                depends_on=s.get(
-                    "depends_on",
-                    [],
-                ),
-                result=s.get(
-                    "result"
-                ),
-            )
-            for s in plan["steps"]
-        ]
-
-        state = JobState(
-            job_id=f"job-{uuid.uuid4().hex[:12]}",
-            user_input=user_input,
-            goal=plan["goal"],
-            plan=steps,
-        )
-
-        state.start()
-        self._record_event(
-            state,
-            "job_created",
-            payload={
-                "goal": state.goal,
-                "step_count": len(state.plan),
-            },
-        )
-        self._persist_state(state)
-
+    def _execute_state(self, state, plan, tools):
         for raw, step in zip(
             plan["steps"],
             state.plan,
@@ -806,3 +765,47 @@ class Orchestrator:
             state
         )
 
+
+    def run(self, user_input, tools):
+        plan = self.planner.plan(
+            user_input
+        )
+
+        steps = [
+            StepState(
+                id=s["id"],
+                description=s["description"],
+                status=s.get(
+                    "status",
+                    "pending",
+                ),
+                depends_on=s.get(
+                    "depends_on",
+                    [],
+                ),
+                result=s.get(
+                    "result"
+                ),
+            )
+            for s in plan["steps"]
+        ]
+
+        state = JobState(
+            job_id=f"job-{uuid.uuid4().hex[:12]}",
+            user_input=user_input,
+            goal=plan["goal"],
+            plan=steps,
+        )
+
+        state.start()
+        self._record_event(
+            state,
+            "job_created",
+            payload={
+                "goal": state.goal,
+                "step_count": len(state.plan),
+            },
+        )
+        self._persist_state(state)
+
+        return self._execute_state(state, plan, tools)
