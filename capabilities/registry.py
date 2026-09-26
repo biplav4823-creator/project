@@ -41,6 +41,13 @@ class CapabilityRegistry:
 
         # Ordered from most specific to most general.
         intents = [
+            ("prompt_construct", ("construct prompt", "build prompt", "create prompt", "prompt construction")),
+            ("text_generate", ("generate text", "generate response", "write text", "text generation")),
+            ("text_summarize", ("summarize text", "summarize", "make a summary", "text summary")),
+            ("text_extract", ("extract fields", "extract information", "extract data", "information extraction")),
+            ("text_classify", ("classify text", "text classification", "categorize text", "classify")),
+            ("text_transform", ("transform text", "change text", "uppercase text", "lowercase text", "normalize whitespace")),
+
             ("csv_parse", (
                 "parse csv data",
                 "parse csv",
