@@ -1,4 +1,4 @@
-import ast
+﻿import ast
 import re
 
 from core.state import JobState, StepState
@@ -12,8 +12,62 @@ class Orchestrator:
         self.verifier = verifier
         self.explainer = explainer
 
+    def _dependency_values(self, previous_results):
+        values = {}
+
+        for item in previous_results:
+            step_id = item.get("step")
+            result = item.get("result")
+
+            if step_id is None or result is None:
+                continue
+
+            if isinstance(result, dict) and "result" in result:
+                result = result["result"]
+
+            values[f"$step{step_id}.result"] = result
+            values[f"$step{step_id}"] = result
+
+        return values
+
+    def _resolve_references(self, text, previous_results):
+        values = self._dependency_values(previous_results)
+
+        resolved = text
+
+        for reference, value in values.items():
+            resolved = resolved.replace(reference, str(value))
+
+        if previous_results:
+            latest = previous_results[-1].get("result")
+
+            if isinstance(latest, dict) and "result" in latest:
+                latest = latest["result"]
+
+            latest_text = str(latest)
+
+            resolved = re.sub(
+                r"\b(the\s+)?(previous|prior|last)\s+(result|answer|value)\b",
+                latest_text,
+                resolved,
+                flags=re.I,
+            )
+
+            resolved = re.sub(
+                r"\bthe\s+result\b",
+                latest_text,
+                resolved,
+                count=1,
+                flags=re.I,
+            )
+
+        return resolved
+
     def _arguments(self, capability, description, previous_results):
-        text = description.strip()
+        text = self._resolve_references(
+            description.strip(),
+            previous_results,
+        )
 
         prefixes = {
             "calculate": "calculate ",
