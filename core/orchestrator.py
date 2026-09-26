@@ -764,6 +764,7 @@ class Orchestrator:
                 ):
                     recovery_attempts += 1
 
+                    state.recovery_attempts[step.id] = recovery_attempts
                     state.execution_context[
                         "recovery_attempts"
                     ] = recovery_attempts
