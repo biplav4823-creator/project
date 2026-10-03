@@ -11,6 +11,7 @@ from core.interrupt import InterruptEngine
 from core.recovery import Recovery, RecoveryDecision
 from core.state_store import StateStore
 from core.context import Context
+from core.tool_runtime import ToolRuntime
 
 
 class Orchestrator:
@@ -28,6 +29,7 @@ class Orchestrator:
         recovery=None,
         state_store=None,
         context=None,
+        tool_runtime=None,
     ):
         self.planner = planner
         self.router = router
@@ -35,6 +37,13 @@ class Orchestrator:
         self.verifier = verifier
         self.explainer = explainer
         self.capabilities = capabilities
+
+        self.tool_runtime = tool_runtime
+        if self.tool_runtime is None and capabilities is not None:
+            self.tool_runtime = ToolRuntime(capabilities)
+
+        if self.tool_runtime is not None and hasattr(self.executor, "runtime"):
+            self.executor.runtime = self.tool_runtime
 
         self.guardrail = guardrail or Guardrail(
             allow_medium=True,
