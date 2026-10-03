@@ -790,6 +790,34 @@ class Orchestrator:
         state.executions.append(execution)
         execution_id = execution.execution_id
 
+        existing_execution = next(
+            (
+                item
+                for item in state.executions
+                if item.idempotency_key == idempotency_key
+                and item.status == "SUCCEEDED"
+            ),
+            None,
+        )
+
+        if existing_execution is not None:
+            execution.status = "SUCCEEDED"
+            execution.completed_at = datetime.now(timezone.utc).isoformat()
+            execution.result = existing_execution.result
+            self._persist_state(state)
+
+            self._record_event(
+                state,
+                "execution_reused",
+                step_id=step.id,
+                payload={
+                    "execution_id": execution_id,
+                    "source_execution_id": existing_execution.execution_id,
+                    "idempotency_key": idempotency_key,
+                },
+            )
+            return existing_execution.result
+
         self._record_event(
             state,
             "execution_started",
