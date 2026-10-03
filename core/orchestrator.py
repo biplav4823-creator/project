@@ -1,4 +1,4 @@
-import ast
+﻿import ast
 import re
 import uuid
 from dataclasses import asdict
@@ -356,7 +356,7 @@ class Orchestrator:
     def _persist_state(self, state):
         self.state_store.save(
             state.job_id,
-            asdict(state),
+            state.to_dict(),
         )
 
     # =========================================================
@@ -448,7 +448,7 @@ class Orchestrator:
                 f"No persisted job found for job_id: {job_id}"
             )
 
-        state = self._state_from_dict(data)
+        state = JobState.from_dict(data)
 
         if state.status == "completed":
             return self.explainer.explain(state)
@@ -870,3 +870,5 @@ class Orchestrator:
         self._persist_state(state)
 
         return self._execute_state(state, plan, tools)
+
+
