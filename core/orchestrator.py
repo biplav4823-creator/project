@@ -775,11 +775,15 @@ class Orchestrator:
                     return "waiting"
 
         execution_attempt = state.recovery_attempts.get(step.id, 0) + 1
+        idempotency_key = (
+            f"{state.job_id}:step:{step.id}:attempt:{execution_attempt}"
+        )
         execution = ExecutionRecord(
             execution_id=str(uuid.uuid4()),
             job_id=state.job_id,
             step_id=step.id,
             attempt=execution_attempt,
+            idempotency_key=idempotency_key,
             status="RUNNING",
             started_at=datetime.now(timezone.utc).isoformat(),
         )
