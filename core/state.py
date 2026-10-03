@@ -51,6 +51,21 @@ class JobState:
     status: str = "created"
     approved_steps: list[int] = field(default_factory=list)
 
+    def request_cancel(self):
+        if self.status not in {"running", "pending", "waiting_approval"}:
+            raise ValueError(f"Cannot cancel job in status: {self.status}")
+        self.status = "cancel_requested"
+
+    def begin_cancelling(self):
+        if self.status != "cancel_requested":
+            raise ValueError(f"Cannot begin cancellation from status: {self.status}")
+        self.status = "cancelling"
+
+    def cancel(self):
+        if self.status != "cancelling":
+            raise ValueError(f"Cannot cancel job in status: {self.status}")
+        self.status = "cancelled"
+
     # ---- lookup -------------------------------------------------------
     def get_step(self, step_id: int):
         for step in self.plan:
