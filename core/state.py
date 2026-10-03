@@ -190,6 +190,10 @@ class JobState:
             failed_steps=list(data.get("failed_steps", [])),
             intermediate_results=list(data.get("intermediate_results", [])),
             execution_context=dict(data.get("execution_context", {})),
+            executions=[
+                ExecutionRecord(**e) if isinstance(e, dict) else e
+                for e in data.get("executions", [])
+            ],
             interrupts=list(data.get("interrupts", [])),
             approval=data.get("approval"),
             recovery_attempts={
