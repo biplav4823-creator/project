@@ -14,6 +14,24 @@ class StepState:
 
 
 @dataclass
+class ExecutionRecord:
+    execution_id: str
+    job_id: str
+    step_id: int
+    attempt: int = 1
+    idempotency_key: str | None = None
+    status: str = "NOT_STARTED"
+    started_at: str | None = None
+    completed_at: str | None = None
+    result: Any = None
+
+    VALID_STATUSES = {"NOT_STARTED", "RUNNING", "SUCCEEDED", "FAILED", "UNKNOWN"}
+
+    def __post_init__(self):
+        if self.status not in self.VALID_STATUSES:
+            raise ValueError(f"Invalid execution status: {self.status}")
+
+
 class JobState:
     job_id: str
     user_input: str
@@ -24,6 +42,7 @@ class JobState:
     failed_steps: list[int] = field(default_factory=list)
     intermediate_results: list[dict[str, Any]] = field(default_factory=list)
     execution_context: dict[str, Any] = field(default_factory=dict)
+    executions: list[ExecutionRecord] = field(default_factory=list)
     interrupts: list[Any] = field(default_factory=list)
     approval: Any = None
     recovery_attempts: dict[int, int] = field(default_factory=dict)
@@ -180,3 +199,4 @@ class JobState:
             status=data.get("status", "created"),
             approved_steps=list(data.get("approved_steps", [])),
         )
+
