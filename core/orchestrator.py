@@ -8,7 +8,7 @@ from core.state import JobState, StepState, ExecutionRecord
 from core.guardrail import Guardrail
 from core.approval import ApprovalGate
 from core.interrupt import InterruptEngine
-from core.recovery import Recovery
+from core.recovery import Recovery, RecoveryDecision
 from core.state_store import StateStore
 from core.context import Context
 
@@ -651,20 +651,37 @@ class Orchestrator:
                 attempts = state.recovery_attempts.get(step.id, 0)
                 recovery_result = self.recovery.recover(exc)
 
+                if isinstance(recovery_result, RecoveryDecision):
+                    recovery_action = recovery_result.action
+                    recovery_payload = {
+                        "action": recovery_result.action,
+                        "reason": recovery_result.reason,
+                        "retryable": recovery_result.retryable,
+                        "retry_policy": recovery_result.retry_policy,
+                        "alternative_capability": recovery_result.alternative_capability,
+                        "replan_required": recovery_result.replan_required,
+                        "rollback_required": recovery_result.rollback_required,
+                        "human_intervention_required": recovery_result.human_intervention_required,
+                        "metadata": recovery_result.metadata,
+                    }
+                else:
+                    recovery_action = str(recovery_result.get("action", "")).upper()
+                    recovery_payload = dict(recovery_result)
+
                 self._record_event(
                     state,
                     "recovery_attempted",
                     step_id=step.id,
                     payload={
                         "error": str(exc),
-                        "recovery": str(recovery_result),
+                        "recovery": recovery_payload,
                     },
                 )
 
-                state.execution_context["recovery"] = recovery_result
+                state.execution_context["recovery"] = recovery_payload
 
                 if (
-                    recovery_result.get("action") == "retry"
+                    recovery_action == "RETRY"
                     and attempts < max_attempts
                 ):
                     attempts += 1
@@ -678,7 +695,7 @@ class Orchestrator:
                         payload={
                             "attempt": attempts,
                             "max_attempts": max_attempts,
-                            "reason": recovery_result.get("reason"),
+                            "reason": recovery_payload.get("reason"),
                         },
                     )
                     self._persist_state(state)
