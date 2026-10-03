@@ -32,6 +32,7 @@ class ExecutionRecord:
             raise ValueError(f"Invalid execution status: {self.status}")
 
 
+@dataclass
 class JobState:
     job_id: str
     user_input: str
@@ -199,4 +200,3 @@ class JobState:
             status=data.get("status", "created"),
             approved_steps=list(data.get("approved_steps", [])),
         )
-
