@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any
 
@@ -12,63 +13,54 @@ class StateStore:
     def _connect(self):
         return sqlite3.connect(self.database_path)
 
-    def _initialize(self):
-        with self._connect() as connection:
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS job_states (
-                    job_id TEXT PRIMARY KEY,
-                    state_json TEXT NOT NULL
-                )
-                """
-            )
-
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS execution_events (
-                    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    job_id TEXT NOT NULL,
-                    event_type TEXT NOT NULL,
-                    step_id INTEGER,
-                    timestamp TEXT NOT NULL,
-                    payload_json TEXT NOT NULL
-                )
-                """
-            )
-
-            connection.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_execution_events_job_id
-                ON execution_events(job_id, event_id)
-                """
-            )
-
+    @contextmanager
+    def _connection(self):
+        connection = sqlite3.connect(self.database_path)
+        try:
+            yield connection
             connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+
+    def _initialize(self):
+        with self._connection() as connection:
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS job_states ("
+                "job_id TEXT PRIMARY KEY, "
+                "state_json TEXT NOT NULL)"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS execution_events ("
+                "event_id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "job_id TEXT NOT NULL, "
+                "event_type TEXT NOT NULL, "
+                "step_id INTEGER, "
+                "timestamp TEXT NOT NULL, "
+                "payload_json TEXT NOT NULL)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_execution_events_job_id "
+                "ON execution_events(job_id, event_id)"
+            )
 
     def save(self, job_id: str, state: dict[str, Any]):
         state_json = json.dumps(state, default=str)
-
-        with self._connect() as connection:
+        with self._connection() as connection:
             connection.execute(
-                """
-                INSERT INTO job_states (job_id, state_json)
-                VALUES (?, ?)
-                ON CONFLICT(job_id)
-                DO UPDATE SET state_json = excluded.state_json
-                """,
-                (job_id, state_json)
+                "INSERT INTO job_states (job_id, state_json) VALUES (?, ?) "
+                "ON CONFLICT(job_id) DO UPDATE SET "
+                "state_json = excluded.state_json",
+                (job_id, state_json),
             )
-            connection.commit()
 
     def load(self, job_id: str):
-        with self._connect() as connection:
+        with self._connection() as connection:
             row = connection.execute(
-                """
-                SELECT state_json
-                FROM job_states
-                WHERE job_id = ?
-                """,
-                (job_id,)
+                "SELECT state_json FROM job_states WHERE job_id = ?",
+                (job_id,),
             ).fetchone()
 
         if row is None:
@@ -77,28 +69,37 @@ class StateStore:
         return json.loads(row[0])
 
     def delete(self, job_id: str):
-        with self._connect() as connection:
+        with self._connection() as connection:
             connection.execute(
-                """
-                DELETE FROM job_states
-                WHERE job_id = ?
-                """,
-                (job_id,)
+                "DELETE FROM job_states WHERE job_id = ?",
+                (job_id,),
             )
-            connection.commit()
 
     def exists(self, job_id: str):
-        with self._connect() as connection:
+        with self._connection() as connection:
             row = connection.execute(
-                """
-                SELECT 1
-                FROM job_states
-                WHERE job_id = ?
-                """,
-                (job_id,)
+                "SELECT 1 FROM job_states WHERE job_id = ?",
+                (job_id,),
             ).fetchone()
 
         return row is not None
+
+    def list_jobs(self):
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT job_id, state_json FROM job_states ORDER BY rowid"
+            ).fetchall()
+
+        jobs = []
+        for job_id, state_json in rows:
+            data = json.loads(state_json)
+            jobs.append({
+                "job_id": job_id,
+                "status": data.get("status"),
+                "goal": data.get("goal"),
+            })
+
+        return jobs
 
     def record_event(
         self,
@@ -110,45 +111,24 @@ class StateStore:
         timestamp = datetime.now(timezone.utc).isoformat()
         payload_json = json.dumps(payload or {}, default=str)
 
-        with self._connect() as connection:
+        with self._connection() as connection:
             cursor = connection.execute(
-                """
-                INSERT INTO execution_events (
-                    job_id,
-                    event_type,
-                    step_id,
-                    timestamp,
-                    payload_json
-                )
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    job_id,
-                    event_type,
-                    step_id,
-                    timestamp,
-                    payload_json,
-                )
+                "INSERT INTO execution_events "
+                "(job_id, event_type, step_id, timestamp, payload_json) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (job_id, event_type, step_id, timestamp, payload_json),
             )
-            connection.commit()
-            return cursor.lastrowid
+            last_id = cursor.lastrowid
+
+        return last_id
 
     def get_events(self, job_id: str):
-        with self._connect() as connection:
+        with self._connection() as connection:
             rows = connection.execute(
-                """
-                SELECT
-                    event_id,
-                    job_id,
-                    event_type,
-                    step_id,
-                    timestamp,
-                    payload_json
-                FROM execution_events
-                WHERE job_id = ?
-                ORDER BY event_id ASC
-                """,
-                (job_id,)
+                "SELECT event_id, job_id, event_type, step_id, timestamp, "
+                "payload_json FROM execution_events "
+                "WHERE job_id = ? ORDER BY event_id ASC",
+                (job_id,),
             ).fetchall()
 
         return [

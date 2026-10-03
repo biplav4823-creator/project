@@ -510,5 +510,19 @@ Rules:
             self.tools,
         )
 
+    def approve(self, job_id, step_id=None):
+        return self.orchestrator.approve(
+            job_id,
+            self.tools,
+            step_id=step_id,
+        )
+
+    def reject(self, job_id, reason="rejected by user", step_id=None):
+        return self.orchestrator.reject(
+            job_id,
+            reason=reason,
+            step_id=step_id,
+        )
+
     def run(self, user_input):
         return self.orchestrator.run(user_input, self.tools)
