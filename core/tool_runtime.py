@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from typing import Any
 
-
 @dataclass(frozen=True)
 class ToolExecutionResult:
     tool: str
@@ -10,15 +9,8 @@ class ToolExecutionResult:
     error: str | None = None
     dry_run: bool = False
 
-
 class ToolRuntime:
-    """
-    Canonical execution boundary for JARVIS tools.
-
-    CP-31.2 is an adapter around the existing registry. It does not
-    replace Executor or CapabilityRegistry yet.
-    """
-
+    """Canonical execution boundary for JARVIS tools."""
     def __init__(self, registry):
         self.registry = registry
 
@@ -28,104 +20,46 @@ class ToolRuntime:
     def get_tool(self, name: str):
         return self.registry.get(name)
 
-    def execute(
-        self,
-        name: str,
-        arguments: dict[str, Any] | None = None,
-    ) -> ToolExecutionResult:
-        arguments = arguments or {}
-
+    def execute(self, name: str, arguments: dict[str, Any] | None = None):
         try:
-            result = self.registry.execute(name, arguments)
-            return ToolExecutionResult(
-                tool=name,
-                status="succeeded",
-                result=result,
-            )
+            result = self.registry.execute(name, arguments or {})
+            return ToolExecutionResult(name, "succeeded", result=result)
         except Exception as exc:
-            return ToolExecutionResult(
-                tool=name,
-                status="failed",
-                error=str(exc),
-            )
+            return ToolExecutionResult(name, "failed", error=str(exc))
 
-    def dry_run(
-        self,
-        name: str,
-        arguments: dict[str, Any] | None = None,
-    ) -> ToolExecutionResult:
+    def dry_run(self, name, arguments=None):
         tool = self.registry.get(name)
-
         if not hasattr(tool, "dry_run"):
-            return ToolExecutionResult(
-                tool=name,
-                status="unsupported",
-                dry_run=True,
-                error=f"Tool '{name}' does not support dry-run.",
-            )
-
+            return ToolExecutionResult(name, "unsupported", dry_run=True,
+                                        error=f"Tool '{name}' does not support dry-run.")
         try:
-            result = tool.dry_run(arguments or {})
             return ToolExecutionResult(
-                tool=name,
-                status="succeeded",
-                result=result,
-                dry_run=True,
+                name, "succeeded", result=tool.dry_run(arguments or {}), dry_run=True
             )
         except NotImplementedError:
             return ToolExecutionResult(
-                tool=name,
-                status="unsupported",
-                dry_run=True,
-                error=f"Tool '{name}' does not support dry-run.",
+                name, "unsupported", dry_run=True,
+                error=f"Tool '{name}' does not support dry-run."
             )
         except Exception as exc:
-            return ToolExecutionResult(
-                tool=name,
-                status="failed",
-                error=str(exc),
-                dry_run=True,
-            )
+            return ToolExecutionResult(name, "failed", error=str(exc), dry_run=True)
 
-    def health(self, name: str) -> dict[str, Any]:
+    def health(self, name):
         tool = self.registry.get(name)
+        return dict(tool.health()) if hasattr(tool, "health") else {"name": name, "healthy": True}
 
-        if hasattr(tool, "health"):
-            return dict(tool.health())
-
-        return {
-            "name": name,
-            "healthy": True,
-        }
-
-    def permissions(self, name: str) -> tuple[str, ...]:
+    def permissions(self, name):
         tool = self.registry.get(name)
+        return tuple(tool.permissions()) if hasattr(tool, "permissions") else tuple(getattr(tool, "permissions", ()) or ())
 
-        if hasattr(tool, "permissions"):
-            return tuple(tool.permissions())
-
-        return tuple(getattr(tool, "permissions", ()) or ())
-
-    def risk(self, name: str) -> str:
+    def risk(self, name):
         tool = self.registry.get(name)
+        return str(tool.risk()) if hasattr(tool, "risk") else str(getattr(tool, "risk", "low") or "low")
 
-        if hasattr(tool, "risk"):
-            return str(tool.risk())
-
-        return str(getattr(tool, "risk", "low") or "low")
-
-    def idempotent(self, name: str) -> bool:
+    def idempotent(self, name):
         tool = self.registry.get(name)
+        return bool(tool.idempotency()) if hasattr(tool, "idempotency") else bool(getattr(tool, "idempotent", False))
 
-        if hasattr(tool, "idempotency"):
-            return bool(tool.idempotency())
-
-        return bool(getattr(tool, "idempotent", False))
-
-    def requires_approval(self, name: str) -> bool:
+    def requires_approval(self, name):
         tool = self.registry.get(name)
-
-        if hasattr(tool, "requires_approval"):
-            return bool(tool.requires_approval())
-
-        return False
+        return bool(tool.requires_approval()) if hasattr(tool, "requires_approval") else False
