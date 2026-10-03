@@ -545,6 +545,17 @@ class Orchestrator:
         return self.explainer.explain(state)
 
     def _execute_state(self, state, plan, tools):
+        if state.status == "cancel_requested":
+            state.begin_cancelling()
+            self._record_event(state, "job_cancelling")
+            self._persist_state(state)
+
+        if state.status == "cancelling":
+            state.cancel()
+            self._record_event(state, "job_cancelled")
+            self._persist_state(state)
+            return self.explainer.explain(state)
+
         for raw, step in zip(plan["steps"], state.plan):
             if (
                 step.id in state.completed_steps
