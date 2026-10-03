@@ -453,7 +453,7 @@ class Orchestrator:
     def resume(self, job_id, tools):
         state = self._load_state(job_id)
 
-        if state.status in ("completed", "waiting_approval"):
+        if state.status in ("completed", "waiting_approval", "cancelled"):
             return self.explainer.explain(state)
 
         rejected = (
