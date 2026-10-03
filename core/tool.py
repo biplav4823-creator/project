@@ -72,3 +72,49 @@ class Tool:
 
     def requires_approval(self) -> bool:
         return self.spec.requires_approval
+
+class CapabilityTool(Tool):
+    """Adapter exposing an existing capability through the canonical Tool contract."""
+
+    def __init__(
+        self,
+        capability,
+        *,
+        version="1.0.0",
+        description="",
+        permissions=(),
+        risk="low",
+        supports_dry_run=False,
+        supports_cancellation=False,
+        idempotent=False,
+        requires_approval=False,
+        dependencies=(),
+        metadata=None,
+    ):
+        self.capability = capability
+
+        name = getattr(capability, "name", None)
+        if not name:
+            raise ValueError("Capability must define a non-empty name")
+
+        self.spec = ToolSpec(
+            name=name,
+            version=version,
+            description=description or str(getattr(capability, "description", "")),
+            permissions=tuple(permissions),
+            risk=risk,
+            supports_dry_run=supports_dry_run,
+            supports_cancellation=supports_cancellation,
+            idempotent=idempotent,
+            requires_approval=requires_approval,
+            dependencies=tuple(dependencies),
+            metadata=dict(metadata or {}),
+        )
+
+    def execute(self, arguments=None):
+        return self.capability.execute(arguments or {})
+
+    def dry_run(self, arguments=None):
+        if hasattr(self.capability, "dry_run"):
+            return self.capability.dry_run(arguments or {})
+        return super().dry_run(arguments or {})
