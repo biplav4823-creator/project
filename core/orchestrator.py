@@ -1,9 +1,10 @@
 import ast
 import re
 import uuid
+from datetime import datetime, timezone
 from dataclasses import asdict
 
-from core.state import JobState, StepState
+from core.state import JobState, StepState, ExecutionRecord
 from core.guardrail import Guardrail
 from core.approval import ApprovalGate
 from core.interrupt import InterruptEngine
@@ -773,11 +774,27 @@ class Orchestrator:
                     self._persist_state(state)
                     return "waiting"
 
+        execution_attempt = state.recovery_attempts.get(step.id, 0) + 1
+        execution = ExecutionRecord(
+            execution_id=str(uuid.uuid4()),
+            job_id=state.job_id,
+            step_id=step.id,
+            attempt=execution_attempt,
+            status="RUNNING",
+            started_at=datetime.now(timezone.utc).isoformat(),
+        )
+        state.executions.append(execution)
+        execution_id = execution.execution_id
+
         self._record_event(
             state,
             "execution_started",
             step_id=step.id,
-            payload={"capability": route.tool},
+            payload={
+                "capability": route.tool,
+                "execution_id": execution_id,
+                "attempt": execution_attempt,
+            },
         )
 
         result = self.executor.execute(
@@ -785,6 +802,11 @@ class Orchestrator:
             route.tool,
             route.arguments,
         )
+
+        execution.status = "SUCCEEDED"
+        execution.completed_at = datetime.now(timezone.utc).isoformat()
+        execution.result = result
+        self._persist_state(state)
 
         self._record_event(
             state,
