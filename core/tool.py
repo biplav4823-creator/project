@@ -101,13 +101,17 @@ class CapabilityTool(Tool):
             name=name,
             version=version,
             description=description or str(getattr(capability, "description", "")),
-            permissions=tuple(permissions),
-            risk=risk,
-            supports_dry_run=supports_dry_run,
+            permissions=tuple(
+                permissions if permissions else getattr(capability, "permissions", ())
+            ),
+            risk=risk if risk != "low" else str(getattr(capability, "risk", "low") or "low"),
+            supports_dry_run=supports_dry_run or hasattr(capability, "dry_run"),
             supports_cancellation=supports_cancellation,
             idempotent=idempotent,
             requires_approval=requires_approval,
-            dependencies=tuple(dependencies),
+            dependencies=tuple(
+                dependencies if dependencies else getattr(capability, "dependencies", ())
+            ),
             metadata=dict(metadata or {}),
         )
 

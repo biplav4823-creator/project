@@ -18,6 +18,8 @@ class ToolRuntime:
         return self.registry.has(name)
 
     def get_tool(self, name: str):
+        if hasattr(self.registry, "get_tool"):
+            return self.registry.get_tool(name)
         return self.registry.get(name)
 
     def execute(self, name: str, arguments: dict[str, Any] | None = None):
@@ -28,7 +30,7 @@ class ToolRuntime:
             return ToolExecutionResult(name, "failed", error=str(exc))
 
     def dry_run(self, name, arguments=None):
-        tool = self.registry.get(name)
+        tool = self.get_tool(name)
         if not hasattr(tool, "dry_run"):
             return ToolExecutionResult(name, "unsupported", dry_run=True,
                                         error=f"Tool '{name}' does not support dry-run.")
@@ -45,21 +47,21 @@ class ToolRuntime:
             return ToolExecutionResult(name, "failed", error=str(exc), dry_run=True)
 
     def health(self, name):
-        tool = self.registry.get(name)
+        tool = self.get_tool(name)
         return dict(tool.health()) if hasattr(tool, "health") else {"name": name, "healthy": True}
 
     def permissions(self, name):
-        tool = self.registry.get(name)
+        tool = self.get_tool(name)
         return tuple(tool.permissions()) if hasattr(tool, "permissions") else tuple(getattr(tool, "permissions", ()) or ())
 
     def risk(self, name):
-        tool = self.registry.get(name)
+        tool = self.get_tool(name)
         return str(tool.risk()) if hasattr(tool, "risk") else str(getattr(tool, "risk", "low") or "low")
 
     def idempotent(self, name):
-        tool = self.registry.get(name)
+        tool = self.get_tool(name)
         return bool(tool.idempotency()) if hasattr(tool, "idempotency") else bool(getattr(tool, "idempotent", False))
 
     def requires_approval(self, name):
-        tool = self.registry.get(name)
+        tool = self.get_tool(name)
         return bool(tool.requires_approval()) if hasattr(tool, "requires_approval") else False
