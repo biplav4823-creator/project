@@ -161,6 +161,14 @@ class JobState:
         else:
             self.status = "pending"
 
+    def mark_running_executions_unknown(self):
+        changed = []
+        for execution in self.executions:
+            if execution.status == "RUNNING":
+                execution.status = "UNKNOWN"
+                changed.append(execution.execution_id)
+        return changed
+
     # ---- serialization ------------------------------------------------
     def to_dict(self):
         return asdict(self)
