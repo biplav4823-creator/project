@@ -1,4 +1,5 @@
 from .capability import Capability
+from core.tool import CapabilityTool
 
 
 class CapabilityRegistry:
@@ -312,6 +313,15 @@ class CapabilityRegistry:
                     matches.append(capability)
 
         return matches[:limit]
+
+    def get_tool(self, name: str):
+        """Return an existing capability through the canonical Tool contract."""
+        capability = self.get(name)
+        return CapabilityTool(capability)
+
+    def list_tools(self):
+        """Return canonical Tool adapters for all registered capabilities."""
+        return [self.get_tool(name) for name in self.list()]
 
     def execute(self, name: str, arguments=None):
         capability = self.get(name)
