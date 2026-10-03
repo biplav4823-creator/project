@@ -15,6 +15,28 @@ class StepState:
 
 @dataclass
 class JobState:
+
+    def to_dict(self):
+        from dataclasses import asdict
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data):
+        plan = [
+            StepState(
+                id=s["id"],
+                description=s["description"],
+                status=s.get("status", "pending"),
+                depends_on=s.get("depends_on", []),
+                capability=s.get("capability"),
+                candidates=s.get("candidates", []),
+                result=s.get("result"),
+            )
+            for s in data.get("plan", [])
+        ]
+        kwargs = dict(data)
+        kwargs["plan"] = plan
+        return cls(**kwargs)
     job_id: str
     user_input: str
     goal: str
