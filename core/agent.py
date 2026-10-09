@@ -18,6 +18,8 @@ class Agent:
     def __init__(self):
         self.tools = ToolRegistry()
         self.capabilities = CapabilityRegistry()
+        from .skill_manager import SkillManager
+        self.skill_manager = SkillManager(self.capabilities)
         self.router = Router()
         self.executor = Executor()
         self.verifier = Verifier()
