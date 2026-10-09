@@ -24,7 +24,7 @@ class ToolRuntime:
 
     def execute(self, name: str, arguments: dict[str, Any] | None = None):
         try:
-            result = self.registry.execute(name, arguments or {})
+            result = self.get_tool(name).execute(arguments or {})
             return ToolExecutionResult(name, "succeeded", result=result)
         except Exception as exc:
             return ToolExecutionResult(name, "failed", error=str(exc))
