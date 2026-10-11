@@ -1,4 +1,4 @@
-﻿import unittest
+import unittest
 
 from capabilities.capability import Capability
 from core.approval import ApprovalGate
@@ -66,6 +66,15 @@ class SkillPolicyTests(unittest.TestCase):
         self.assertEqual(
             build_effective_contract(
                 capability(risk="critical"), make_skill()
+            ).risk,
+            "critical",
+        )
+
+    def test_critical_run_python_risk_is_not_lowered(self):
+        self.assertEqual(
+            build_effective_contract(
+                capability(name="run_python", risk="critical"),
+                make_skill(),
             ).risk,
             "critical",
         )

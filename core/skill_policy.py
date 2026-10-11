@@ -11,7 +11,7 @@ def build_effective_contract(capability, skill=None):
     if capability_risk not in RISK_ORDER:
         raise ValueError(f"Unknown capability risk level: {capability_risk!r}")
 
-    if capability.name == "run_python":
+    if capability.name == "run_python" and RISK_ORDER[capability_risk] < RISK_ORDER["high"]:
         capability_risk = "high"
 
     permissions = set(capability.permissions or [])
