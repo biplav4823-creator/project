@@ -11,6 +11,7 @@ class StepState:
     capability: str | None = None
     candidates: list[str] = field(default_factory=list)
     result: Any = None
+    skill: str | None = None
 
 
 @dataclass
@@ -197,6 +198,7 @@ class JobState:
                 status=s.get("status", "pending"),
                 depends_on=list(s.get("depends_on", [])),
                 capability=s.get("capability"),
+                skill=s.get("skill"),
                 candidates=list(s.get("candidates", [])),
                 result=s.get("result"),
             )

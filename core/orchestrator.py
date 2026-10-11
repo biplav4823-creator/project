@@ -433,6 +433,7 @@ class Orchestrator:
                     "status": step.status,
                     "depends_on": step.depends_on,
                     "capability": step.capability,
+                    "skill": step.skill,
                     "candidates": step.candidates,
                     "result": step.result,
                 }
@@ -943,6 +944,7 @@ class Orchestrator:
                     [],
                 ),
                 capability=s.get("capability"),
+                skill=s.get("skill"),
                 candidates=s.get("candidates", []),
                 result=s.get(
                     "result"
