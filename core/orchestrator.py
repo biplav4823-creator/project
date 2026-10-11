@@ -872,6 +872,7 @@ class Orchestrator:
             started_at=datetime.now(timezone.utc).isoformat(),
         )
         state.executions.append(execution)
+        self._persist_state(state)
         execution_id = execution.execution_id
 
         existing_execution = next(
@@ -884,99 +885,163 @@ class Orchestrator:
             None,
         )
 
-        if existing_execution is not None:
-            # Reuse the prior result without repeating the tool side effect.
-            # Continue through the normal validation and completion flow below.
-            result = existing_execution.result
-            execution.status = "SUCCEEDED"
+        reused_execution = existing_execution is not None
+        result = None
+
+        # Invocation failures belong to the execution lifecycle.
+        try:
+            if existing_execution is not None:
+                result = existing_execution.result
+                execution.result = result
+                self._record_event(
+                    state,
+                    "execution_reused",
+                    step_id=step.id,
+                    payload={
+                        "execution_id": execution_id,
+                        "source_execution_id": existing_execution.execution_id,
+                        "idempotency_key": idempotency_key,
+                    },
+                )
+            else:
+                self._record_event(
+                    state,
+                    "execution_started",
+                    step_id=step.id,
+                    payload={
+                        "capability": route.tool,
+                        "execution_id": execution_id,
+                        "attempt": execution_attempt,
+                    },
+                )
+                result = self.executor.execute(
+                    tools,
+                    route.tool,
+                    route.arguments,
+                    approved=approved,
+                    allowed_permissions=effective_contract.permissions,
+                    effective_risk=effective_contract.risk,
+                )
+                execution.result = result
+        except Exception as exc:
+            execution.status = "FAILED"
             execution.completed_at = datetime.now(timezone.utc).isoformat()
             execution.result = result
             self._persist_state(state)
-
             self._record_event(
                 state,
-                "execution_reused",
-                step_id=step.id,
-                payload={
-                    "execution_id": execution_id,
-                    "source_execution_id": existing_execution.execution_id,
-                    "idempotency_key": idempotency_key,
-                },
-            )
-        else:
-            self._record_event(
-                state,
-                "execution_started",
+                "execution_failed",
                 step_id=step.id,
                 payload={
                     "capability": route.tool,
                     "execution_id": execution_id,
-                    "attempt": execution_attempt,
+                    "reused": reused_execution,
+                    "reason": str(exc),
                 },
             )
-
-            result = self.executor.execute(
-                tools,
-                route.tool,
-                route.arguments,
-                approved=approved,
-                allowed_permissions=effective_contract.permissions,
-                effective_risk=effective_contract.risk,
-            )
-
-            execution.status = "SUCCEEDED"
-            execution.completed_at = datetime.now(timezone.utc).isoformat()
-            execution.result = result
             self._persist_state(state)
+            raise
 
+        # A returned invocation is successful independently of later checks.
+        execution.status = "SUCCEEDED"
+        execution.completed_at = datetime.now(timezone.utc).isoformat()
+        execution.result = result
+        self._persist_state(state)
+        self._record_event(
+            state,
+            "execution_completed",
+            step_id=step.id,
+            payload={
+                "capability": route.tool,
+                "execution_id": execution_id,
+                "reused": reused_execution,
+            },
+        )
+        self._persist_state(state)
+
+        # Validation failures fail the step, not the already-returned invocation.
+        try:
+            if capability_contract is not None:
+                capability_contract.validate_output(result)
+        except Exception as exc:
             self._record_event(
                 state,
-                "execution_completed",
+                "output_validation_failed",
                 step_id=step.id,
-                payload={"capability": route.tool},
+                payload={
+                    "capability": route.tool,
+                    "execution_id": execution_id,
+                    "reused": reused_execution,
+                    "reason": str(exc),
+                },
             )
+            self._persist_state(state)
+            raise RuntimeError(
+                f"Output validation failed: {exc}"
+            ) from exc
 
-        if capability_contract is not None:
-            capability_contract.validate_output(result)
+        # Normalize verifier exceptions to non-retryable RuntimeError failures.
+        try:
+            verified = self.verifier.verify(result)
+            if not isinstance(verified, dict):
+                raise TypeError("Verifier returned an invalid result contract.")
+        except Exception as exc:
+            self._record_event(
+                state,
+                "verification_failed",
+                step_id=step.id,
+                payload={
+                    "capability": route.tool,
+                    "execution_id": execution_id,
+                    "status": "error",
+                    "reason": str(exc),
+                },
+            )
+            self._persist_state(state)
+            raise RuntimeError(
+                f"Verification failed due to verifier error: {exc}"
+            ) from exc
 
-        verified = self.verifier.verify(result)
-        if not isinstance(verified, dict):
-            raise RuntimeError("Verifier returned an invalid result contract.")
-        verification_status = verified.get('status')
+        verification_status = verified.get("status")
         if verification_status is None:
-            # Compatibility for existing custom verifiers.
             verification_status = (
-                'passed' if verified.get('verified') is True else 'indeterminate'
+                "passed"
+                if verified.get("verified") is True
+                else "indeterminate"
             )
+
         verification_passed = (
-            verification_status == 'passed'
-            and verified.get('verified') is True
+            verification_status == "passed"
+            and verified.get("verified") is True
         )
+
         if not verification_passed:
-            verification_reason = str(
-                verified.get('reason') or 'Verification did not pass.'
+            reason = str(
+                verified.get("reason") or "Verification did not pass."
             )
             self._record_event(
                 state,
                 "verification_failed",
                 step_id=step.id,
                 payload={
-                    'capability': route.tool,
-                    'status': str(verification_status),
-                    'reason': verification_reason,
+                    "capability": route.tool,
+                    "execution_id": execution_id,
+                    "status": str(verification_status),
+                    "reason": reason,
                 },
             )
+            self._persist_state(state)
             raise RuntimeError(
-                f'Verification did not pass ({verification_status}): '
-                f'{verification_reason}'
+                f"Verification did not pass ({verification_status}): {reason}"
             )
 
         self._record_event(
             state,
             "verification_completed",
             step_id=step.id,
-            payload={"capability": route.tool},
+            payload={"capability": route.tool, "execution_id": execution_id},
         )
+        self._persist_state(state)
 
         if capability_contract is not None:
             post_interrupt = self.interrupt_engine.post_execution(

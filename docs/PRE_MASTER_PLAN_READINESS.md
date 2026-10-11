@@ -43,6 +43,7 @@ The terminal output captured at CP-37 reported:
 | CP-28 lifecycle and recovery | 8 tests passed |
 | CP-41 execution-output verification contract | 4 tests passed |
 | CP-42 governed canonical tool runtime | 12 tests passed |
+| CP-43 verification-gated execution lifecycle | 3 tests passed |
 | Python compilation of `core` and `capabilities` | Passed |
 | `git diff --check` | Passed |
 
@@ -129,8 +130,10 @@ not a claim of production readiness. CP-40 adds per-checkpoint database
 isolation and a continuous-integration gate. CP-41 defines an explicit
 execution-output verification contract; its presence-based checks do not
 establish semantic correctness. CP-42 enforces canonical tool risk, permission,
-approval and timeout contracts at the runtime boundary. OmniRoute reachability,
-credentials, and a real live completion test remain operational prerequisites.
+approval and timeout contracts at the runtime boundary. CP-43 records successful tool invocation separately from output validation
+and verification. Failed post-invocation checks fail the step/job without
+misclassifying a returned invocation as failed. OmniRoute reachability, credentials, and a real
+live completion test remain operational prerequisites.
 
 Run the full baseline with:
 

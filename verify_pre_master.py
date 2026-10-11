@@ -10,6 +10,7 @@ CHECKPOINTS = [
     "verify_cp40.py",
     "verify_cp41.py",
     "verify_cp42.py",
+    "verify_cp43.py",
     "verify_cp11_cp12.py",
     "verify_cp13.py",
     "verify_cp14.py",
@@ -49,6 +50,7 @@ REQUIRED_FILES = [
     "verify_cp40.py",
     "verify_cp41.py",
     "verify_cp42.py",
+    "verify_cp43.py",
     ".github/workflows/ci.yml",
 ]
 
