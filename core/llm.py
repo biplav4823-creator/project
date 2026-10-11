@@ -15,13 +15,61 @@ def _api_key():
     return key
 
 
+def _request_omniroute(operation, request):
+    """Make an OmniRoute request with actionable, secret-safe errors."""
+    try:
+        response = request()
+        response.raise_for_status()
+        return response
+    except requests.Timeout as exc:
+        raise RuntimeError(
+            f"OmniRoute {operation} timed out. Check gateway health "
+            "and provider response time."
+        ) from exc
+    except requests.ConnectionError as exc:
+        raise RuntimeError(
+            f"OmniRoute {operation} failed: cannot connect to "
+            f"{OMNIROUTE_BASE_URL}. Check that the gateway is running "
+            "and OMNIROUTE_BASE_URL is correct."
+        ) from exc
+    except requests.HTTPError as exc:
+        status = getattr(
+            getattr(exc, "response", None), "status_code", None
+        )
+        status_text = (
+            f"HTTP {status}" if status is not None else "an HTTP error"
+        )
+        raise RuntimeError(
+            f"OmniRoute {operation} failed with {status_text}. "
+            "Check the API key, endpoint path, and gateway logs."
+        ) from exc
+
+
+def _error_summary(error):
+    """Return concise diagnostic text without exposing response bodies."""
+    if isinstance(error, RuntimeError):
+        return str(error)
+    if isinstance(error, requests.Timeout):
+        return "request timed out"
+    if isinstance(error, requests.ConnectionError):
+        return "connection failed; the service may be stopped or unreachable"
+    if isinstance(error, requests.HTTPError):
+        status = getattr(
+            getattr(error, "response", None), "status_code", None
+        )
+        return f"HTTP {status}" if status is not None else "HTTP error"
+    return type(error).__name__
+
+
 def list_omniroute_models():
-    response = requests.get(
-        f"{OMNIROUTE_BASE_URL}/models",
-        headers={"Authorization": f"Bearer {_api_key()}"},
-        timeout=30
+    response = _request_omniroute(
+        "model discovery",
+        lambda: requests.get(
+            f"{OMNIROUTE_BASE_URL}/models",
+            headers={"Authorization": f"Bearer {_api_key()}"},
+            timeout=30,
+        ),
     )
-    response.raise_for_status()
     data = response.json()
     return sorted({
         item["id"] for item in data.get("data", [])
@@ -45,21 +93,23 @@ def set_active_model(model_id):
 
 
 def _ask_omniroute(messages, model):
-    response = requests.post(
-        f"{OMNIROUTE_BASE_URL}/chat/completions",
-        headers={
-            "Authorization": f"Bearer {_api_key()}",
-            "Content-Type": "application/json"
-        },
-        json={
-            "model": model,
-            "messages": messages,
-            "stream": False,
-            "max_tokens": 2048
-        },
-        timeout=120
+    response = _request_omniroute(
+        "chat completion",
+        lambda: requests.post(
+            f"{OMNIROUTE_BASE_URL}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {_api_key()}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": model,
+                "messages": messages,
+                "stream": False,
+                "max_tokens": 2048,
+            },
+            timeout=120,
+        ),
     )
-    response.raise_for_status()
     data = response.json()
     choices = data.get("choices") or []
     if not choices:
@@ -110,9 +160,9 @@ def ask_messages(messages, ollama_url=None, ollama_model=None):
             return _ask_ollama(messages, ollama_url, ollama_model)
         except Exception as ollama_error:
             raise RuntimeError(
-                "OmniRoute and Ollama both failed. "
-                f"OmniRoute: {type(omni_error).__name__}; "
-                f"Ollama: {type(ollama_error).__name__}"
+                "Both OmniRoute and Ollama failed. "
+                f"OmniRoute: {_error_summary(omni_error)}; "
+                f"Ollama: {_error_summary(ollama_error)}"
             ) from ollama_error
 
 
