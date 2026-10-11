@@ -84,6 +84,7 @@ class CapabilityTool(Tool):
         description="",
         permissions=(),
         risk="low",
+        timeout_seconds=None,
         supports_dry_run=False,
         supports_cancellation=False,
         idempotent=False,
@@ -97,6 +98,38 @@ class CapabilityTool(Tool):
         if not name:
             raise ValueError("Capability must define a non-empty name")
 
+        risk_order = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+        capability_risk = str(getattr(capability, "risk", "low") or "low").lower()
+        requested_risk = str(risk or "low").lower()
+
+        # Adapter metadata may raise risk but must never lower it.
+        if capability_risk not in risk_order:
+            effective_risk = capability_risk
+        elif requested_risk not in risk_order:
+            effective_risk = requested_risk
+        else:
+            effective_risk = max(
+                (capability_risk, requested_risk),
+                key=risk_order.__getitem__,
+            )
+
+        if (
+            name == "run_python"
+            and effective_risk in risk_order
+            and risk_order[effective_risk] < risk_order["high"]
+        ):
+            effective_risk = "high"
+
+        capability_approval = getattr(capability, "requires_approval", False)
+        if callable(capability_approval):
+            capability_approval = capability_approval()
+
+        approval_required = (
+            bool(requires_approval)
+            or bool(capability_approval)
+            or effective_risk in {"medium", "high"}
+        )
+
         self.spec = ToolSpec(
             name=name,
             version=version,
@@ -104,11 +137,12 @@ class CapabilityTool(Tool):
             permissions=tuple(
                 permissions if permissions else getattr(capability, "permissions", ())
             ),
-            risk=risk if risk != "low" else str(getattr(capability, "risk", "low") or "low"),
+            risk=effective_risk,
+            timeout_seconds=timeout_seconds,
             supports_dry_run=supports_dry_run or hasattr(capability, "dry_run"),
             supports_cancellation=supports_cancellation,
             idempotent=idempotent,
-            requires_approval=requires_approval,
+            requires_approval=approval_required,
             dependencies=tuple(
                 dependencies if dependencies else getattr(capability, "dependencies", ())
             ),
@@ -117,6 +151,14 @@ class CapabilityTool(Tool):
 
     def execute(self, arguments=None):
         return self.capability.execute(arguments or {})
+
+    def execute_with_timeout(self, arguments=None, *, timeout_seconds):
+        hook = getattr(self.capability, "execute_with_timeout", None)
+        if not callable(hook):
+            raise NotImplementedError(
+                f"Capability '{self.spec.name}' has no timeout-aware execution hook."
+            )
+        return hook(arguments or {}, timeout_seconds=timeout_seconds)
 
     def dry_run(self, arguments=None):
         if hasattr(self.capability, "dry_run"):

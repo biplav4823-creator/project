@@ -823,7 +823,19 @@ class Orchestrator:
                 state.record_interrupts(interrupt_result.interrupts)
                 self._persist_state(state)
 
-            if step.id not in state.approved_steps:
+            tool_approval_check = getattr(
+                self.tool_runtime, "requires_approval", None
+            )
+            tool_requires_approval = (
+                bool(tool_approval_check(route.tool))
+                if callable(tool_approval_check)
+                else False
+            )
+            if tool_requires_approval:
+                effective_contract.requires_approval = True
+
+            approved = step.id in state.approved_steps
+            if not approved:
                 approval = self.approval_gate.evaluate(
                     effective_contract,
                     step_id=step.id,
@@ -844,6 +856,7 @@ class Orchestrator:
                     state.wait_for_approval(step.id, approval)
                     self._persist_state(state)
                     return "waiting"
+                approved = True
 
         execution_attempt = state.recovery_attempts.get(step.id, 0) + 1
         idempotency_key = (
@@ -906,6 +919,9 @@ class Orchestrator:
                 tools,
                 route.tool,
                 route.arguments,
+                approved=approved,
+                allowed_permissions=effective_contract.permissions,
+                effective_risk=effective_contract.risk,
             )
 
             execution.status = "SUCCEEDED"
@@ -924,6 +940,36 @@ class Orchestrator:
             capability_contract.validate_output(result)
 
         verified = self.verifier.verify(result)
+        if not isinstance(verified, dict):
+            raise RuntimeError("Verifier returned an invalid result contract.")
+        verification_status = verified.get('status')
+        if verification_status is None:
+            # Compatibility for existing custom verifiers.
+            verification_status = (
+                'passed' if verified.get('verified') is True else 'indeterminate'
+            )
+        verification_passed = (
+            verification_status == 'passed'
+            and verified.get('verified') is True
+        )
+        if not verification_passed:
+            verification_reason = str(
+                verified.get('reason') or 'Verification did not pass.'
+            )
+            self._record_event(
+                state,
+                "verification_failed",
+                step_id=step.id,
+                payload={
+                    'capability': route.tool,
+                    'status': str(verification_status),
+                    'reason': verification_reason,
+                },
+            )
+            raise RuntimeError(
+                f'Verification did not pass ({verification_status}): '
+                f'{verification_reason}'
+            )
 
         self._record_event(
             state,

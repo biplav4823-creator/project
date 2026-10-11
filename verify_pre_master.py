@@ -8,6 +8,8 @@ ROOT = Path(__file__).resolve().parent
 
 CHECKPOINTS = [
     "verify_cp40.py",
+    "verify_cp41.py",
+    "verify_cp42.py",
     "verify_cp11_cp12.py",
     "verify_cp13.py",
     "verify_cp14.py",
@@ -45,6 +47,8 @@ REQUIRED_FILES = [
     "capabilities/registry.py",
     "docs/PRE_MASTER_PLAN_READINESS.md",
     "verify_cp40.py",
+    "verify_cp41.py",
+    "verify_cp42.py",
     ".github/workflows/ci.yml",
 ]
 

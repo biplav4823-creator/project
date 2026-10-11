@@ -41,6 +41,8 @@ The terminal output captured at CP-37 reported:
 | CP-33 skill governance policy | 17 tests passed |
 | CP-32 planner discovery and skill integration | 7 + 3 checks passed |
 | CP-28 lifecycle and recovery | 8 tests passed |
+| CP-41 execution-output verification contract | 4 tests passed |
+| CP-42 governed canonical tool runtime | 12 tests passed |
 | Python compilation of `core` and `capabilities` | Passed |
 | `git diff --check` | Passed |
 
@@ -122,11 +124,13 @@ The next master plan must:
 
 ## Readiness decision
 
-The CP-39 unified checkpoint regression run passed all declared
-checkpoint verifiers and Python compilation. This is validated test evidence,
-not a claim of production readiness. OmniRoute reachability, credentials, and
-a real live completion test remain operational prerequisites. CP-40 adds
-per-checkpoint database isolation and a repeatable continuous-integration gate.
+The unified checkpoint regression suite provides repeatable test evidence,
+not a claim of production readiness. CP-40 adds per-checkpoint database
+isolation and a continuous-integration gate. CP-41 defines an explicit
+execution-output verification contract; its presence-based checks do not
+establish semantic correctness. CP-42 enforces canonical tool risk, permission,
+approval and timeout contracts at the runtime boundary. OmniRoute reachability,
+credentials, and a real live completion test remain operational prerequisites.
 
 Run the full baseline with:
 
