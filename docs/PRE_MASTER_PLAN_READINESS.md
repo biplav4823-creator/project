@@ -72,6 +72,20 @@ execution reuse while passing the stored result through output validation,
 verification, context propagation and step completion. The CP-26 verifier
 also checks that the execution-reuse event is recorded.
 
+## Test isolation and CI gate
+
+`StateStore` keeps `jarvis_state.db` as the application default. The
+`JARVIS_STATE_DB` environment variable provides an explicit database-path
+override, without changing callers that supply their own database path.
+
+The unified verifier assigns each checkpoint a separate disposable SQLite
+database and cleans up those temporary databases after the run. This prevents
+the baseline suite from polluting normal application job history.
+
+CP-40 adds a GitHub Actions workflow that installs the declared dependencies,
+compiles the project packages, and runs the unified verification suite on
+pushes and pull requests.
+
 ## Confirmed defects and unfinished integration work
 
 1. Restore or correctly configure the OmniRoute service and establish valid
@@ -108,11 +122,11 @@ The next master plan must:
 
 ## Readiness decision
 
-The repository has enough implemented architecture and verification evidence
-to define a concrete master plan. It is **not yet operationally complete**:
-OmniRoute reachability and credentials remain unresolved, and the unified
-checkpoint regression run must pass before this documentation change is
-accepted.
+The CP-39 unified checkpoint regression run passed all declared
+checkpoint verifiers and Python compilation. This is validated test evidence,
+not a claim of production readiness. OmniRoute reachability, credentials, and
+a real live completion test remain operational prerequisites. CP-40 adds
+per-checkpoint database isolation and a repeatable continuous-integration gate.
 
 Run the full baseline with:
 

@@ -1,10 +1,13 @@
 from pathlib import Path
+import os
 import subprocess
 import sys
+import tempfile
 
 ROOT = Path(__file__).resolve().parent
 
 CHECKPOINTS = [
+    "verify_cp40.py",
     "verify_cp11_cp12.py",
     "verify_cp13.py",
     "verify_cp14.py",
@@ -41,11 +44,16 @@ REQUIRED_FILES = [
     "core/llm_diagnostics.py",
     "capabilities/registry.py",
     "docs/PRE_MASTER_PLAN_READINESS.md",
+    "verify_cp40.py",
+    ".github/workflows/ci.yml",
 ]
 
 
 def main():
     failures = []
+    isolated_state_root = tempfile.TemporaryDirectory(
+        prefix="jarvis_pre_master_"
+    )
 
     print("JARVIS PRE-MASTER-PLAN VERIFICATION", flush=True)
     print(f"Repository: {ROOT}", flush=True)
@@ -63,6 +71,7 @@ def main():
     if document.is_file():
         contents = document.read_text(encoding="utf-8")
         for marker in (
+            "## Test isolation and CI gate",
             "## Current architecture",
             "## Operational provider status",
             "## Confirmed defects and unfinished integration work",
@@ -85,9 +94,20 @@ def main():
 
         print(f"\n--- {script} ---", flush=True)
         try:
+            checkpoint_env = os.environ.copy()
+            checkpoint_env["JARVIS_STATE_DB"] = str(
+                Path(isolated_state_root.name)
+                / f"{Path(script).stem}.db"
+            )
+            print(
+                "[ISOLATED STATE] "
+                + Path(checkpoint_env["JARVIS_STATE_DB"]).name,
+                flush=True,
+            )
             result = subprocess.run(
                 [sys.executable, str(path)],
                 cwd=ROOT,
+                env=checkpoint_env,
                 check=False,
             )
         except OSError as exc:
@@ -119,9 +139,10 @@ def main():
         print(f"[FAIL] Compilation exited {result.returncode}", flush=True)
         failures.append("compileall")
 
+    isolated_state_root.cleanup()
+
     print("\n=== Baseline summary ===", flush=True)
-    passed = len(CHECKPOINTS) + len(REQUIRED_FILES) + 5 + 1
-    # The total above is informational; failures, not the count, decide success.
+    print("Checkpoint databases: isolated and cleaned up")
     print(f"Checkpoint verifiers declared: {len(CHECKPOINTS)}")
     print(f"Required files checked: {len(REQUIRED_FILES)}")
 

@@ -1,4 +1,5 @@
 import json
+import os
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -6,8 +7,12 @@ from typing import Any
 
 
 class StateStore:
-    def __init__(self, database_path="jarvis_state.db"):
-        self.database_path = database_path
+    def __init__(self, database_path=None):
+        if database_path is None:
+            database_path = (
+                os.getenv("JARVIS_STATE_DB") or "jarvis_state.db"
+            )
+        self.database_path = str(database_path)
         self._initialize()
 
     def _connect(self):
