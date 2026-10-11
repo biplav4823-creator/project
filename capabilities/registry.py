@@ -133,6 +133,11 @@ class CapabilityRegistry:
                     "data profile",
                     "profile the data",
                     "inspect dataset",
+                    "analyze a dataset",
+                    "analyze dataset",
+                    "analyze the dataset",
+                    "analyze this dataset",
+                    "analyze data",
                 ),
             ),
             (
