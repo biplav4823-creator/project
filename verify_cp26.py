@@ -1,4 +1,4 @@
-﻿from dataclasses import asdict
+from dataclasses import asdict
 from core.main import create_agent
 from core.state_store import StateStore
 
@@ -23,4 +23,11 @@ print("STEP2_RESULT=", resumed.plan[1].result)
 assert resumed.status == "completed", f"status={resumed.status}"
 assert resumed.plan[0].status == "completed"
 assert resumed.plan[1].result["result"] == "15", f"got {resumed.plan[1].result!r}"
+
+events = agent.get_execution_history(job_id)
+event_types = [event["event_type"] for event in events]
+assert "execution_reused" in event_types, (
+    f"Expected an execution_reused event; got {event_types!r}"
+)
+
 print("CP26 RESUME TEST: PASS")

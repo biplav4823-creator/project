@@ -872,9 +872,12 @@ class Orchestrator:
         )
 
         if existing_execution is not None:
+            # Reuse the prior result without repeating the tool side effect.
+            # Continue through the normal validation and completion flow below.
+            result = existing_execution.result
             execution.status = "SUCCEEDED"
             execution.completed_at = datetime.now(timezone.utc).isoformat()
-            execution.result = existing_execution.result
+            execution.result = result
             self._persist_state(state)
 
             self._record_event(
@@ -887,36 +890,35 @@ class Orchestrator:
                     "idempotency_key": idempotency_key,
                 },
             )
-            return existing_execution.result
+        else:
+            self._record_event(
+                state,
+                "execution_started",
+                step_id=step.id,
+                payload={
+                    "capability": route.tool,
+                    "execution_id": execution_id,
+                    "attempt": execution_attempt,
+                },
+            )
 
-        self._record_event(
-            state,
-            "execution_started",
-            step_id=step.id,
-            payload={
-                "capability": route.tool,
-                "execution_id": execution_id,
-                "attempt": execution_attempt,
-            },
-        )
+            result = self.executor.execute(
+                tools,
+                route.tool,
+                route.arguments,
+            )
 
-        result = self.executor.execute(
-            tools,
-            route.tool,
-            route.arguments,
-        )
+            execution.status = "SUCCEEDED"
+            execution.completed_at = datetime.now(timezone.utc).isoformat()
+            execution.result = result
+            self._persist_state(state)
 
-        execution.status = "SUCCEEDED"
-        execution.completed_at = datetime.now(timezone.utc).isoformat()
-        execution.result = result
-        self._persist_state(state)
-
-        self._record_event(
-            state,
-            "execution_completed",
-            step_id=step.id,
-            payload={"capability": route.tool},
-        )
+            self._record_event(
+                state,
+                "execution_completed",
+                step_id=step.id,
+                payload={"capability": route.tool},
+            )
 
         if capability_contract is not None:
             capability_contract.validate_output(result)

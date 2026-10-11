@@ -1,7 +1,7 @@
-# JARVIS ? Pre-Master-Plan Readiness Baseline
+# JARVIS - Pre-Master-Plan Readiness Baseline
 
-**Baseline date:** 2026-10-11  
-**Baseline source commit:** `da859c5` (`fix(cp37): validate gateway base URLs`)  
+**Baseline date:** 2026-10-11
+**Baseline source commit:** `da859c5` (`fix(cp37): validate gateway base URLs`)
 **Branch:** `cp26-resume-implementation`
 
 ## Purpose
@@ -62,6 +62,15 @@ At the CP-36 health-report run:
 Provider status can change. The health report must be rerun before treating
 either provider as currently available. The OmniRoute failure does not prove
 that any particular management or MCP endpoint is unsupported.
+
+## Resume idempotency regression
+
+The unified baseline exposed a resume defect: a previously successful tool
+execution could be reused, but its result bypassed the normal verification
+and step-completion path, leaving the job pending. The repair preserves
+execution reuse while passing the stored result through output validation,
+verification, context propagation and step completion. The CP-26 verifier
+also checks that the execution-reuse event is recorded.
 
 ## Confirmed defects and unfinished integration work
 
