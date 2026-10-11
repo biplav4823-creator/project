@@ -788,6 +788,12 @@ class Orchestrator:
                         f"{step.skill!r}."
                     )
 
+            if skill is not None and route.tool not in skill.capabilities():
+                raise RuntimeError(
+                    f"Step {step.id!r} references skill {step.skill!r}, "
+                    f"which does not declare capability {route.tool!r}."
+                )
+
             effective_contract = build_effective_contract(
                 capability_contract, skill
             )
