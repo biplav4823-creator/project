@@ -31,12 +31,17 @@ def _safe_url(value):
 
 
 def _valid_url(value):
+    """Accept only clean HTTP(S) base URLs without embedded secrets."""
     try:
         parsed = urlsplit(str(value))
         return (
             parsed.scheme in ("http", "https")
             and parsed.hostname is not None
             and parsed.port != 0
+            and parsed.username is None
+            and parsed.password is None
+            and not parsed.query
+            and not parsed.fragment
         )
     except (TypeError, ValueError):
         return False

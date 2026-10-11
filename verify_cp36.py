@@ -22,7 +22,7 @@ class CP36ProviderDiagnosticsTests(unittest.TestCase):
             diag.requests, "get", return_value=response
         ) as get:
             result = diag.probe_omniroute(
-                "https://user:pass@gateway.test/v1?token=hidden",
+                "https://gateway.test/v1",
                 api_key="never-print-this",
             )
 
@@ -33,11 +33,36 @@ class CP36ProviderDiagnosticsTests(unittest.TestCase):
         self.assertEqual(result["url"], "https://gateway.test/v1/models")
         self.assertTrue(result["api_key_configured"])
         self.assertEqual(
+            get.call_args.args[0], "https://gateway.test/v1/models"
+        )
+        self.assertEqual(
             get.call_args.kwargs["headers"]["Authorization"],
             "Bearer never-print-this",
         )
         self.assertNotIn("never-print-this", str(result))
-        self.assertNotIn("hidden", str(result))
+
+    def test_base_urls_with_credentials_query_or_fragment_are_rejected(self):
+        invalid_urls = [
+            "https://user:secret-pass@gateway.test/v1",
+            "https://gateway.test/v1?token=hidden",
+            "https://gateway.test/v1#fragment",
+        ]
+
+        for url in invalid_urls:
+            with self.subTest(url=url), patch.object(
+                diag.requests, "get"
+            ) as get:
+                result = diag.probe_omniroute(
+                    url, api_key="never-print-this"
+                )
+
+                self.assertEqual(
+                    result["status"], "invalid_configuration"
+                )
+                get.assert_not_called()
+                self.assertNotIn("secret-pass", str(result))
+                self.assertNotIn("hidden", str(result))
+                self.assertNotIn("never-print-this", str(result))
 
     def test_missing_key_and_unauthorized_endpoint_are_distinguished(self):
         with patch.object(
