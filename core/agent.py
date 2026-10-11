@@ -25,7 +25,7 @@ class Agent:
         self.verifier = Verifier()
         self.explainer = Explainer()
 
-        self.planner = Planner(self.capabilities)
+        self.planner = Planner(self.capabilities, self.skill_manager)
 
         self.orchestrator = Orchestrator(
             planner=self.planner,

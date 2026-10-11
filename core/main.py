@@ -1,4 +1,5 @@
-from .agent import Agent
+﻿from .agent import Agent
+from .skill import Skill, SkillSpec
 
 from tools.mathematics import (
     calculate,
@@ -24,6 +25,12 @@ from faculties.data_science import register_data_science
 from faculties.gen_ai import register_gen_ai
 from faculties.agentic_ops import register_agentic_ops
 from faculties.data_engineering import register_data_engineering
+
+
+
+class RegisteredSkill(Skill):
+    def __init__(self, spec):
+        self.spec = spec
 
 
 def create_agent():
@@ -158,6 +165,48 @@ def create_agent():
 
     # DATA ENGINEERING FACULTY
     register_data_engineering(agent)
+
+    skill_groups = {
+        "mathematics": (
+            "calculate", "derivative", "nth_derivative", "integral",
+            "definite_integral", "limit", "series", "solve_equation",
+            "solve_system", "factor", "expand", "simplify", "numerical",
+            "matrix_determinant", "matrix_inverse", "matrix_rank",
+        ),
+        "data_science": (
+            "data_statistics", "data_correlation",
+            "linear_regression", "dataset_profile",
+        ),
+        "data_engineering": (
+            "csv_parse", "csv_serialize", "schema_inspect",
+            "data_validate", "data_transform", "data_aggregate",
+        ),
+        "generative_ai": (
+            "prompt_construct", "text_generate", "text_summarize",
+            "text_extract", "text_classify", "text_transform",
+        ),
+        "agentic_operations": (
+            "job_inspect", "plan_validate", "dependency_inspect",
+            "retry_policy", "execution_summary", "operational_diagnose",
+        ),
+        "python_execution": ("run_python",),
+    }
+
+    for name, capabilities in skill_groups.items():
+        available = tuple(
+            capability for capability in capabilities
+            if agent.capabilities.has(capability)
+        )
+        if available:
+            agent.skill_manager.register(
+                RegisteredSkill(
+                    SkillSpec(
+                        name=name,
+                        description=f"Governed skill for {name.replace('_', ' ')}.",
+                        capabilities=available,
+                    )
+                )
+            )
 
     return agent
 
