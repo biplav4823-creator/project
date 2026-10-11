@@ -765,8 +765,35 @@ class Orchestrator:
             capability_contract = self.capabilities.get(route.tool)
             capability_contract.validate_input(route.arguments)
 
+            from core.skill_policy import build_effective_contract
+
+            skill = None
+            if step.skill:
+                skill_manager = getattr(self.planner, "skill_manager", None)
+                if skill_manager is None:
+                    raise RuntimeError(
+                        f"Step {step.id!r} references skill {step.skill!r}, "
+                        "but no SkillManager is available."
+                    )
+                try:
+                    skill = skill_manager.get(step.skill)
+                except KeyError as exc:
+                    raise RuntimeError(
+                        f"Step {step.id!r} references unknown skill "
+                        f"{step.skill!r}."
+                    ) from exc
+                if skill is None:
+                    raise RuntimeError(
+                        f"Step {step.id!r} references unknown skill "
+                        f"{step.skill!r}."
+                    )
+
+            effective_contract = build_effective_contract(
+                capability_contract, skill
+            )
+
             self.guardrail.check(
-                capability_contract,
+                effective_contract,
                 route.arguments,
             )
 
@@ -781,7 +808,7 @@ class Orchestrator:
             )
 
             interrupt_result = self.interrupt_engine.pre_execution(
-                capability_contract,
+                effective_contract,
                 step_id=step.id,
                 arguments=route.arguments,
             )
@@ -792,7 +819,7 @@ class Orchestrator:
 
             if step.id not in state.approved_steps:
                 approval = self.approval_gate.evaluate(
-                    capability_contract,
+                    effective_contract,
                     step_id=step.id,
                     arguments=route.arguments,
                     interrupts=interrupt_result.interrupts,
