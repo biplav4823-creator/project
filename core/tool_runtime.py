@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import Any
 
+from core.errors import classify
+
 @dataclass(frozen=True)
 class ToolExecutionResult:
     tool: str
@@ -8,6 +10,7 @@ class ToolExecutionResult:
     result: Any = None
     error: str | None = None
     dry_run: bool = False
+    error_info: Any = None
 
 class ToolRuntime:
     """Governed execution boundary for canonical JARVIS tools."""
@@ -168,7 +171,10 @@ class ToolRuntime:
             return ToolExecutionResult(name, "succeeded", result=result)
 
         except Exception as exc:
-            return ToolExecutionResult(name, "failed", error=str(exc))
+            info = classify(exc)
+            return ToolExecutionResult(
+                name, "failed", error=info.message, error_info=info
+            )
 
     def dry_run(self, name, arguments=None):
         tool = self.get_tool(name)
@@ -187,7 +193,11 @@ class ToolRuntime:
                 error=f"Tool '{name}' does not support dry-run.",
             )
         except Exception as exc:
-            return ToolExecutionResult(name, "failed", error=str(exc), dry_run=True)
+            info = classify(exc)
+            return ToolExecutionResult(
+                name, "failed", error=info.message,
+                error_info=info, dry_run=True,
+            )
 
     def health(self, name):
         tool = self.get_tool(name)
