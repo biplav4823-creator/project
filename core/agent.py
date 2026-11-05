@@ -52,6 +52,7 @@ class Agent:
         output_schema=None,
         permissions=None,
         risk="low",
+        idempotent=False,
     ):
         import inspect
 
@@ -141,7 +142,8 @@ class Agent:
                 output_schema=output_schema,
                 permissions=permissions or [],
                 risk=risk,
-                executor=lambda arguments: function(**arguments)
+                executor=lambda arguments: function(**arguments),
+                idempotent=bool(idempotent),
             )
         )
 

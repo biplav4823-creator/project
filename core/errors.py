@@ -15,6 +15,7 @@ Design rules (CP-44):
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import asdict, dataclass
 
 OUTCOME_NOT_STARTED = "not_started"
@@ -46,6 +47,28 @@ class ErrorInfo:
         return asdict(self)
 
 
+class ExecutionNotStartedError(RuntimeError):
+    """Adapter signal: the side-effecting operation was provably not dispatched.
+
+    Only raise this when the adapter can establish that no operation began.
+    A generic connection, timeout, validation, or provider exception is not proof.
+    """
+
+
+class CapabilityNotDeclaredError(ExecutionNotStartedError):
+    """A skill boundary rejected routing before tool dispatch."""
+
+    def __init__(self, capability: str):
+        safe = (
+            capability
+            if isinstance(capability, str)
+            and re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", capability)
+            else "<invalid>"
+        )
+        self.capability = safe
+        super().__init__(f"Skill does not declare capability {safe!r}.")
+
+
 class ToolFailure(RuntimeError):
     """A tool invocation failure that carries its classified ``ErrorInfo``.
 
@@ -73,43 +96,58 @@ def _info(code, retryable, outcome, label, exc) -> ErrorInfo:
 
 
 def classify(exc: BaseException) -> ErrorInfo:
-    """Map any exception to a stable, redacted ``ErrorInfo``."""
+    """Map exceptions conservatively; only an explicit marker proves no start."""
     if isinstance(exc, ToolFailure):
         return exc.info
 
     names = _class_names(exc)
 
     def has(*fragments: str) -> bool:
-        return any(f in n for n in names for f in fragments)
+        return any(fragment in name for name in names for fragment in fragments)
 
+    if isinstance(exc, CapabilityNotDeclaredError):
+        return _info(
+            "capability_not_declared", False, OUTCOME_NOT_STARTED,
+            f"Skill does not declare capability {exc.capability!r}", exc,
+        )
+    if isinstance(exc, ExecutionNotStartedError):
+        return _info(
+            "execution_not_started", True, OUTCOME_NOT_STARTED,
+            "Execution did not start", exc,
+        )
     if isinstance(exc, ConnectionRefusedError):
         return _info(
-            "connection_refused", True, OUTCOME_NOT_STARTED,
-            "Connection refused", exc,
+            "connection_refused", True, OUTCOME_UNKNOWN,
+            "Connection refused; execution outcome is unknown", exc,
         )
     if isinstance(exc, TimeoutError) or has("timeout", "timedout"):
         return _info(
-            "timeout", True, OUTCOME_UNKNOWN, "Tool call timed out", exc
+            "timeout", True, OUTCOME_UNKNOWN,
+            "Tool call timed out", exc,
         )
     if isinstance(exc, ConnectionError) or has("connection"):
         return _info(
-            "connection", True, OUTCOME_UNKNOWN, "Connection failed", exc
+            "connection", True, OUTCOME_UNKNOWN,
+            "Connection failed; execution outcome is unknown", exc,
         )
     if has("ratelimit", "throttl", "toomanyrequests"):
         return _info(
-            "throttled", True, OUTCOME_NOT_STARTED, "Rate limited", exc
+            "throttled", True, OUTCOME_UNKNOWN,
+            "Request throttled; execution outcome is unknown", exc,
         )
     if isinstance(exc, PermissionError) or has(
         "auth", "permission", "forbidden"
     ):
         return _info(
-            "auth", False, OUTCOME_FAILED, "Authorization failed", exc
+            "auth", False, OUTCOME_UNKNOWN,
+            "Authorization failed; execution outcome is unknown", exc,
         )
-    if isinstance(exc, (ValueError, TypeError, KeyError)) or has(
-        "validation"
-    ):
+    if isinstance(exc, (ValueError, TypeError, KeyError)) or has("validation"):
         return _info(
-            "invalid_input", False, OUTCOME_FAILED,
-            "Tool rejected its input", exc,
+            "invalid_input", False, OUTCOME_UNKNOWN,
+            "Tool rejected its input; execution outcome is unknown", exc,
         )
-    return _info("tool_error", False, OUTCOME_UNKNOWN, "Tool failed", exc)
+    return _info(
+        "tool_error", False, OUTCOME_UNKNOWN,
+        "Tool failed; execution outcome is unknown", exc,
+    )

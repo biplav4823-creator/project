@@ -5,6 +5,7 @@ import tempfile
 import traceback
 
 from core.agent import Agent
+from core.errors import ExecutionNotStartedError
 from core.state import JobState
 from core.state_store import StateStore
 
@@ -86,7 +87,7 @@ def t_failed_job_resumes_to_completed():
 
     def calculate(expression: str) -> str:
         if mode["fail"]:
-            raise RuntimeError("down")
+            raise ExecutionNotStartedError("down")
         return "2"
 
     agent = make_agent(calculate)

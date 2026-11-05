@@ -3,6 +3,7 @@ from typing import Any
 
 from core.errors import (
     OUTCOME_NOT_STARTED,
+    OUTCOME_UNKNOWN,
     classify,
     debug_errors_enabled,
 )
@@ -47,20 +48,36 @@ class Recovery:
             "error_code": info.code,
             "error": info.message,
             "outcome": info.outcome,
+            "tool_idempotent": tool_idempotent,
         }
         if debug_errors_enabled():
             metadata["error_detail"] = str(error)
 
-        if info.retryable:
-            if info.outcome == OUTCOME_NOT_STARTED or tool_idempotent is True:
+        if info.outcome == OUTCOME_NOT_STARTED:
+            if info.retryable:
                 return RecoveryDecision(
                     action="RETRY",
                     retryable=True,
-                    reason="transient_error",
+                    reason="execution_not_started",
                     retry_policy={"max_attempts": self.MAX_ATTEMPTS},
                     metadata=metadata,
                 )
+            return RecoveryDecision(
+                action="ABORT",
+                retryable=False,
+                reason="non_retryable_error",
+                metadata=metadata,
+            )
 
+        if info.outcome == OUTCOME_UNKNOWN:
+            if info.retryable and tool_idempotent is True:
+                return RecoveryDecision(
+                    action="RETRY",
+                    retryable=True,
+                    reason="transient_idempotent_error",
+                    retry_policy={"max_attempts": self.MAX_ATTEMPTS},
+                    metadata=metadata,
+                )
             return RecoveryDecision(
                 action="ABORT",
                 retryable=False,

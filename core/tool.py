@@ -87,7 +87,7 @@ class CapabilityTool(Tool):
         timeout_seconds=None,
         supports_dry_run=False,
         supports_cancellation=False,
-        idempotent=False,
+        idempotent=None,
         requires_approval=False,
         dependencies=(),
         metadata=None,
@@ -141,7 +141,11 @@ class CapabilityTool(Tool):
             timeout_seconds=timeout_seconds,
             supports_dry_run=supports_dry_run or hasattr(capability, "dry_run"),
             supports_cancellation=supports_cancellation,
-            idempotent=idempotent,
+            idempotent=(
+                bool(getattr(capability, "idempotent", False))
+                if idempotent is None
+                else bool(idempotent)
+            ),
             requires_approval=approval_required,
             dependencies=tuple(
                 dependencies if dependencies else getattr(capability, "dependencies", ())

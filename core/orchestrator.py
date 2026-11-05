@@ -1,4 +1,5 @@
 import ast
+import inspect
 import re
 import uuid
 from datetime import datetime, timezone
@@ -12,6 +13,7 @@ from core.recovery import Recovery, RecoveryDecision
 from core.state_store import StateStore
 from core.context import Context
 from core.tool_runtime import ToolRuntime
+from core.errors import CapabilityNotDeclaredError, classify
 
 
 class Orchestrator:
@@ -474,6 +476,47 @@ class Orchestrator:
         if state.status == "failed" and rejected:
             return self.explainer.explain(state)
 
+        incomplete_step_ids = {
+            step.id for step in state.plan if step.id not in state.completed_steps
+        }
+        last_success = {}
+        for index, execution in enumerate(state.executions):
+            if execution.status == "SUCCEEDED":
+                last_success[execution.step_id] = index
+        uncertain_executions = [
+            execution
+            for index, execution in enumerate(state.executions)
+            if execution.step_id in incomplete_step_ids
+            and execution.status in {"RUNNING", "UNKNOWN"}
+            and index > last_success.get(execution.step_id, -1)
+        ]
+        if uncertain_executions:
+            by_step = {}
+            for execution in uncertain_executions:
+                by_step.setdefault(execution.step_id, []).append(execution)
+            for step_id, executions in sorted(by_step.items()):
+                self._record_event(
+                    state,
+                    "resume_blocked_uncertain_execution",
+                    step_id=step_id,
+                    payload={
+                        "reason": "manual_reconciliation_required",
+                        "executions": [
+                            {
+                                "execution_id": item.execution_id,
+                                "attempt": item.attempt,
+                                "status": item.status,
+                            }
+                            for item in executions
+                        ],
+                    },
+                )
+            self._persist_state(state)
+            raise RuntimeError(
+                "Cannot resume automatically: an execution is RUNNING or has "
+                "an UNKNOWN outcome; manual reconciliation is required."
+            )
+
         if state.status == "failed":
             state.reset_failed()
 
@@ -669,8 +712,33 @@ class Orchestrator:
                 )
 
             except Exception as exc:
+                info = classify(exc)
                 attempts = state.recovery_attempts.get(step.id, 0)
-                recovery_result = self.recovery.recover(exc)
+                recover_method = self.recovery.recover
+                try:
+                    parameters = inspect.signature(recover_method).parameters.values()
+                    accepts_idempotency = any(
+                        parameter.name == "tool_idempotent"
+                        or parameter.kind == inspect.Parameter.VAR_KEYWORD
+                        for parameter in parameters
+                    )
+                except (TypeError, ValueError):
+                    accepts_idempotency = False
+
+                if accepts_idempotency:
+                    tool_idempotent = None
+                    idempotency_lookup = getattr(self.tool_runtime, "idempotent", None)
+                    if callable(idempotency_lookup):
+                        try:
+                            tool_idempotent = bool(idempotency_lookup(capability))
+                        except Exception:
+                            tool_idempotent = None
+                    recovery_result = recover_method(
+                        exc, tool_idempotent=tool_idempotent
+                    )
+                else:
+                    # Keep compatibility with historical one-argument recovery adapters.
+                    recovery_result = recover_method(exc)
 
                 if isinstance(recovery_result, RecoveryDecision):
                     recovery_action = recovery_result.action
@@ -694,7 +762,7 @@ class Orchestrator:
                     "recovery_attempted",
                     step_id=step.id,
                     payload={
-                        "error": str(exc),
+                        "error": info.message,
                         "recovery": recovery_payload,
                     },
                 )
@@ -722,7 +790,7 @@ class Orchestrator:
                     self._persist_state(state)
                     continue
 
-                state.fail_step(step.id, str(exc))
+                state.fail_step(step.id, info.message)
                 self._persist_state(state)
                 return "failed"
 
@@ -789,10 +857,7 @@ class Orchestrator:
                     )
 
             if skill is not None and route.tool not in skill.capabilities():
-                raise RuntimeError(
-                    f"Step {step.id!r} references skill {step.skill!r}, "
-                    f"which does not declare capability {route.tool!r}."
-                )
+                raise CapabilityNotDeclaredError(route.tool)
 
             effective_contract = build_effective_contract(
                 capability_contract, skill
@@ -859,9 +924,8 @@ class Orchestrator:
                 approved = True
 
         execution_attempt = state.recovery_attempts.get(step.id, 0) + 1
-        idempotency_key = (
-            f"{state.job_id}:step:{step.id}:attempt:{execution_attempt}"
-        )
+        idempotency_key = f"{state.job_id}:step:{step.id}"
+        legacy_key_prefix = f"{state.job_id}:step:{step.id}:attempt:"
         execution = ExecutionRecord(
             execution_id=str(uuid.uuid4()),
             job_id=state.job_id,
@@ -878,9 +942,15 @@ class Orchestrator:
         existing_execution = next(
             (
                 item
-                for item in state.executions
-                if item.idempotency_key == idempotency_key
-                and item.status == "SUCCEEDED"
+                for item in reversed(state.executions)
+                if item.status == "SUCCEEDED"
+                and (
+                    item.idempotency_key == idempotency_key
+                    or (
+                        isinstance(item.idempotency_key, str)
+                        and item.idempotency_key.startswith(legacy_key_prefix)
+                    )
+                )
             ),
             None,
         )
@@ -924,19 +994,31 @@ class Orchestrator:
                 )
                 execution.result = result
         except Exception as exc:
-            execution.status = "FAILED"
+            info = classify(exc)
+            status_by_outcome = {
+                "not_started": "NOT_STARTED",
+                "unknown": "UNKNOWN",
+                "failed": "FAILED",
+            }
+            event_by_outcome = {
+                "not_started": "execution_not_started",
+                "unknown": "execution_unknown",
+                "failed": "execution_failed",
+            }
+            execution.status = status_by_outcome[info.outcome]
             execution.completed_at = datetime.now(timezone.utc).isoformat()
             execution.result = result
             self._persist_state(state)
             self._record_event(
                 state,
-                "execution_failed",
+                event_by_outcome[info.outcome],
                 step_id=step.id,
                 payload={
                     "capability": route.tool,
                     "execution_id": execution_id,
                     "reused": reused_execution,
-                    "reason": str(exc),
+                    "reason": info.message,
+                    "error_info": info.to_dict(),
                 },
             )
             self._persist_state(state)
