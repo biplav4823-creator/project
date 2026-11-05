@@ -25,3 +25,8 @@ artifacts/
 .idea/
 
 jarvis_state.db
+
+*.db
+backups/
+__pycache__/
+*.bak

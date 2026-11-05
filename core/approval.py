@@ -39,17 +39,24 @@ class ApprovalGate:
         step_id=None,
         arguments=None,
         interrupts=None,
+        requires_approval=False,
     ):
         name = capability.name
         risk = capability.risk or "low"
         interrupts = interrupts or []
 
-        requires_approval = (
+        contract_requirement = getattr(capability, "requires_approval", False)
+        if callable(contract_requirement):
+            contract_requirement = contract_requirement()
+
+        approval_required = (
             risk in self.APPROVAL_RISKS
             or bool(interrupts)
+            or bool(requires_approval)
+            or bool(contract_requirement)
         )
 
-        if not requires_approval:
+        if not approval_required:
             return ApprovalDecision(
                 action="allow",
                 capability=name,
@@ -60,11 +67,16 @@ class ApprovalGate:
             )
 
         interrupt = interrupts[0] if interrupts else Interrupt(
-            name=f"{risk}_risk",
+            name=(
+                f"{risk}_risk"
+                if risk in self.APPROVAL_RISKS
+                else "explicit_approval_required"
+            ),
             phase="pre_execution",
             reason=(
-                f"Capability '{name}' is {risk} risk "
-                "and requires human approval."
+                f"Capability '{name}' is {risk} risk and requires human approval."
+                if risk in self.APPROVAL_RISKS
+                else f"Capability '{name}' requires human approval by tool policy."
             ),
             capability=name,
             step_id=step_id,

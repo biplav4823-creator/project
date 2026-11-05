@@ -20,3 +20,9 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:4b")
 JARVIS_NAME = os.getenv("JARVIS_NAME", "JARVIS")
 
 DATA_DIR.mkdir(exist_ok=True)
+
+OMNIROUTE_BASE_URL = os.getenv(
+    "OMNIROUTE_BASE_URL", "http://127.0.0.1:20128/v1"
+).rstrip("/")
+OMNIROUTE_MODEL = os.getenv("OMNIROUTE_MODEL", "auto/coding")
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "omniroute").lower()

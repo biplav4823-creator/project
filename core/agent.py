@@ -18,12 +18,14 @@ class Agent:
     def __init__(self):
         self.tools = ToolRegistry()
         self.capabilities = CapabilityRegistry()
+        from .skill_manager import SkillManager
+        self.skill_manager = SkillManager(self.capabilities)
         self.router = Router()
         self.executor = Executor()
         self.verifier = Verifier()
         self.explainer = Explainer()
 
-        self.planner = Planner(self.capabilities)
+        self.planner = Planner(self.capabilities, self.skill_manager)
 
         self.orchestrator = Orchestrator(
             planner=self.planner,
@@ -50,6 +52,7 @@ class Agent:
         output_schema=None,
         permissions=None,
         risk="low",
+        idempotent=False,
     ):
         import inspect
 
@@ -139,7 +142,8 @@ class Agent:
                 output_schema=output_schema,
                 permissions=permissions or [],
                 risk=risk,
-                executor=lambda arguments: function(**arguments)
+                executor=lambda arguments: function(**arguments),
+                idempotent=bool(idempotent),
             )
         )
 
@@ -503,6 +507,26 @@ Rules:
     # =========================================================
     # MAIN EXECUTION
     # =========================================================
+
+    def resume(self, job_id):
+        return self.orchestrator.resume(
+            job_id,
+            self.tools,
+        )
+
+    def approve(self, job_id, step_id=None):
+        return self.orchestrator.approve(
+            job_id,
+            self.tools,
+            step_id=step_id,
+        )
+
+    def reject(self, job_id, reason="rejected by user", step_id=None):
+        return self.orchestrator.reject(
+            job_id,
+            reason=reason,
+            step_id=step_id,
+        )
 
     def run(self, user_input):
         return self.orchestrator.run(user_input, self.tools)

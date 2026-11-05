@@ -16,6 +16,7 @@ class Capability:
     risk: str = "low"
     interrupts: list[str] = field(default_factory=list)
     executor: Callable[..., Any] | None = None
+    idempotent: bool = False
 
     def validate_input(self, arguments: dict[str, Any] | None = None):
         arguments = arguments or {}

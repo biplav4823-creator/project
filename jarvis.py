@@ -424,14 +424,38 @@ def handle_command(command):
 # ---------------- OLLAMA AI ----------------
 
 def ask_ollama(user_message):
-
-    conversation.append(
-        {
-            "role": "user",
-            "content": user_message
-        }
+    from core.llm import (
+        ask_messages, list_omniroute_models,
+        get_active_model, set_active_model
     )
 
+    command = user_message.strip()
+    lower = command.lower()
+
+    if lower in ("/model", "current model", "which model"):
+        return f"Active model: {get_active_model()}"
+
+    if lower in ("/models", "list models", "show models"):
+        try:
+            models = list_omniroute_models()
+            return "Available models:\n" + "\n".join(models[:80]) + (
+                f"\n...and {len(models) - 80} more." if len(models) > 80 else ""
+            )
+        except Exception as exc:
+            return f"Could not load OmniRoute models: {type(exc).__name__}: {exc}"
+
+    model_prefixes = ("/model ", "use model ")
+    for prefix in model_prefixes:
+        if lower.startswith(prefix):
+            model_id = command[len(prefix):].strip()
+            try:
+                if set_active_model(model_id):
+                    return f"Model changed to {model_id}"
+                return "Model ID not found in the OmniRoute catalog."
+            except Exception as exc:
+                return f"Could not change model: {type(exc).__name__}: {exc}"
+
+    conversation.append({"role": "user", "content": user_message})
 
     system_prompt = """
 You are JARVIS, a professional local AI assistant running on Windows.
@@ -453,95 +477,18 @@ IMPORTANT RULES:
 12. Be professional, natural, and direct.
 """
 
-
-    messages = [
-        {
-            "role": "system",
-            "content": system_prompt
-        }
-    ]
-
-
-    messages.extend(
-        conversation[-10:]
-    )
-
-
-    payload = {
-        "model": MODEL,
-        "messages": messages,
-        "stream": False
-    }
-
+    messages = [{"role": "system", "content": system_prompt}]
+    messages.extend(conversation[-10:])
 
     try:
-
-        data = json.dumps(
-            payload
-        ).encode("utf-8")
-
-
-        request = urllib.request.Request(
-
-            OLLAMA_URL,
-
-            data=data,
-
-            headers={
-                "Content-Type": "application/json"
-            },
-
-            method="POST"
-        )
-
-
-        with urllib.request.urlopen(
-            request,
-            timeout=120
-        ) as response:
-
-            result = json.loads(
-                response.read().decode("utf-8")
-            )
-
-
-        answer = result[
-            "message"
-        ][
-            "content"
-        ].strip()
-
-
-        conversation.append(
-            {
-                "role": "assistant",
-                "content": answer
-            }
-        )
-
-
+        answer = ask_messages(messages, ollama_url=OLLAMA_URL, ollama_model=MODEL)
+        conversation.append({"role": "assistant", "content": answer})
         return answer
+    except Exception as exc:
+        print("AI provider error:", type(exc).__name__, str(exc))
+        return "I could not get a response from OmniRoute or Ollama. Check the provider connection and API key."
 
 
-    except urllib.error.URLError:
-
-        return (
-            "I cannot connect to Ollama. "
-            "Please make sure Ollama is running."
-        )
-
-
-    except Exception as e:
-
-        print(
-            "Ollama error:",
-            e
-        )
-
-        return (
-            "Something went wrong "
-            "while contacting my AI model."
-        )
 
 
 # ---------------- MAIN PROGRAM ----------------
