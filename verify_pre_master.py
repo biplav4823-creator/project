@@ -18,6 +18,7 @@ CHECKPOINTS = [
     "verify_cp48.py",
     "verify_cp49.py",
     "verify_cp50.py",
+    "verify_cp51.py",
     "verify_cp11_cp12.py",
     "verify_cp13.py",
     "verify_cp14.py",
@@ -49,6 +50,7 @@ REQUIRED_FILES = [
     "core/trace.py",
     "core/skill_manifest.py",
     "core/delegation.py",
+    "core/llm_planner.py",
     "core/state.py",
     "core/state_store.py",
     "core/approval.py",
@@ -71,6 +73,7 @@ REQUIRED_FILES = [
     "verify_cp48.py",
     "verify_cp49.py",
     "verify_cp50.py",
+    "verify_cp51.py",
     ".github/workflows/ci.yml",
 ]
 

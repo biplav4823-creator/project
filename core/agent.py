@@ -25,7 +25,10 @@ class Agent:
         self.verifier = Verifier()
         self.explainer = Explainer()
 
-        self.planner = Planner(self.capabilities, self.skill_manager)
+        from .llm_planner import LLMPlanner
+        self.planner = LLMPlanner(
+            Planner(self.capabilities, self.skill_manager)
+        )
 
         self.orchestrator = Orchestrator(
             planner=self.planner,
@@ -39,6 +42,10 @@ class Agent:
     # =========================================================
     # TOOL REGISTRATION
     # =========================================================
+
+    def get_trace(self, job_id):
+        from .trace import build_trace
+        return build_trace(job_id, self.get_execution_history(job_id))
 
     def discover_capabilities(self, query, limit=5):
         return self.capabilities.discover(query, limit=limit)
