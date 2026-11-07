@@ -2,6 +2,23 @@ from .capability import Capability
 from core.tool import CapabilityTool
 
 
+def _phrase_matches(phrase, query):
+    """Whole-word match: 'sum' must not match 'summarize' or 'assume'.
+
+    The phrase must start on a word boundary and end on one, allowing a
+    simple inflection suffix (s, es, ed, ing).
+    """
+    import re as _re
+
+    if not isinstance(phrase, str) or not isinstance(query, str):
+        return False
+    phrase = phrase.strip().lower()
+    if not phrase:
+        return False
+    pattern = r"(?<!\w)" + _re.escape(phrase) + r"(?:s|es|ed|ing)?(?!\w)"
+    return _re.search(pattern, query.lower()) is not None
+
+
 class CapabilityRegistry:
     def __init__(self):
         self._capabilities: dict[str, Capability] = {}
@@ -312,7 +329,7 @@ class CapabilityRegistry:
         matches = []
 
         for name, phrases in intents:
-            if any(phrase in q for phrase in phrases):
+            if any(_phrase_matches(phrase, q) for phrase in phrases):
                 capability = self._capabilities.get(name)
                 if capability is not None:
                     matches.append(capability)
