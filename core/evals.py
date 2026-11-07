@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import functools
 import json
 import operator
 import statistics
@@ -51,15 +52,13 @@ class EvalTask:
 
 
 def _counting(trial: Trial, name: str, fn: Callable[..., Any]) -> Callable[..., Any]:
+    @functools.wraps(fn)  # keeps the signature visible to schema inspection
     def wrapper(*args, **kwargs):
         trial.calls[name] = trial.calls.get(name, 0) + 1
         out = fn(*args, **kwargs)
         trial.outputs.append(out)
         return out
 
-    wrapper.__name__ = getattr(fn, "__name__", name)
-    wrapper.__doc__ = getattr(fn, "__doc__", None)
-    wrapper.__annotations__ = dict(getattr(fn, "__annotations__", {}))
     return wrapper
 
 
@@ -144,6 +143,15 @@ def run_suite(
                 "pass_at_1": round(ok / k, 4),
                 "pass_hat_k": ok == k,
                 "reasons": sorted({t["reason"] for t in trials if t["reason"]}),
+                "trial_details": [
+                    {
+                        "status": t["status"],
+                        "calls": t["calls"],
+                        "reason": t["reason"],
+                        "error_type": t["error_type"],
+                    }
+                    for t in trials
+                ],
             }
         )
     n_tasks = len(tasks)

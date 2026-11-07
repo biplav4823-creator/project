@@ -117,7 +117,11 @@ class HarnessLogicTests(unittest.TestCase):
 class RealAgentSuiteTests(unittest.TestCase):
     def test_builtin_suite_is_reliable_on_the_real_agent(self):
         report = run_suite(builtin_tasks(), k=2)
-        failing = [t for t in report["tasks"] if not t["pass_hat_k"]]
+        failing = [
+            {k: v for k, v in t.items() if k != "trials"}
+            for t in report["tasks"]
+            if not t["pass_hat_k"]
+        ]
         self.assertEqual(failing, [], failing)
         self.assertEqual(report["summary"]["false_success_rate"], 0.0)
 
