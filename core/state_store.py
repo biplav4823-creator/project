@@ -98,6 +98,8 @@ class StateStore:
         jobs = []
         for job_id, state_json in rows:
             data = json.loads(state_json)
+            if not isinstance(data, dict):
+                continue
             jobs.append({
                 "job_id": job_id,
                 "status": data.get("status"),
