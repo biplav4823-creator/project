@@ -30,3 +30,7 @@ jarvis_state.db
 backups/
 __pycache__/
 *.bak
+
+# added by cp59
+*.sqlite
+audit_report.*
