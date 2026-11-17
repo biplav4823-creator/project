@@ -149,3 +149,20 @@ python -m core.llm_diagnostics
 
 The provider diagnostic does not perform a completion, mutate configuration,
 or validate MCP administration endpoints.
+
+## Checkpoint status (CP-44 to CP-59)
+
+| CP | Delivered | Wired into the live run |
+|---|---|---|
+| 44 | Typed errors, idempotency keys, UNKNOWN handling, resume guard | Yes |
+| 45 | Whole-word capability discovery | Yes |
+| 46 | Operator reconciliation of uncertain executions | Yes |
+| 47 | End-state eval harness (pass@1, pass^k, false-success rate) | CLI (`python -m core.evals`) |
+| 48 | Secret-safe job traces and metrics | `Agent.get_trace` |
+| 49 | Skill manifests, provenance, cycle checks, governed MCP allowlist | Standalone |
+| 50 | Bounded delegation (depth, fan-out, permission inheritance) | Standalone |
+| 51 | Governed LLM capability selection (off by default) | Yes (`JARVIS_LLM_PLANNER=1`) |
+| 52-58 | Memory, owner policy, scheduler, DAG, artifacts, secret broker, skill scanner | Standalone (if merged) |
+| 59 | Provider attribution, secret-safe provider errors, readiness audit | `python -m core.readiness_audit` |
+
+Run `python -m core.readiness_audit --live` for the current evidence-based status of every item above.

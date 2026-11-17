@@ -1,3 +1,4 @@
+import re
 import os
 import requests
 from .config import (
@@ -48,7 +49,7 @@ def _request_omniroute(operation, request):
 def _error_summary(error):
     """Return concise diagnostic text without exposing response bodies."""
     if isinstance(error, RuntimeError):
-        return str(error)
+        return _scrub(error)
     if isinstance(error, requests.Timeout):
         return "request timed out"
     if isinstance(error, requests.ConnectionError):
@@ -150,14 +151,46 @@ def _ask_ollama(messages, ollama_url=None, ollama_model=None):
     return answer
 
 
+_LAST_PROVIDER = {"provider": None, "model": None}
+_SECRET_PATTERN = re.compile(
+    r"(sk-[A-Za-z0-9_-]{8,}|bearer\s+[A-Za-z0-9._~+/=-]{8,}"
+    r"|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})",
+    re.IGNORECASE,
+)
+
+
+def _scrub(text):
+    return _SECRET_PATTERN.sub("[REDACTED]", str(text))
+
+
+def _attributed(provider, model, answer):
+    _LAST_PROVIDER["provider"] = provider
+    _LAST_PROVIDER["model"] = model
+    return answer
+
+
+def last_provider():
+    """Provider/model that produced the most recent successful answer."""
+    return dict(_LAST_PROVIDER)
+
+
 def ask_messages(messages, ollama_url=None, ollama_model=None):
     if LLM_PROVIDER == "ollama":
-        return _ask_ollama(messages, ollama_url, ollama_model)
+        return _attributed(
+            "ollama",
+            ollama_model or OLLAMA_MODEL,
+            _ask_ollama(messages, ollama_url, ollama_model),
+        )
     try:
-        return _ask_omniroute(messages, get_active_model())
+        _model = get_active_model()
+        return _attributed("omniroute", _model, _ask_omniroute(messages, _model))
     except Exception as omni_error:
         try:
-            return _ask_ollama(messages, ollama_url, ollama_model)
+            return _attributed(
+                "ollama",
+                ollama_model or OLLAMA_MODEL,
+                _ask_ollama(messages, ollama_url, ollama_model),
+            )
         except Exception as ollama_error:
             raise RuntimeError(
                 "Both OmniRoute and Ollama failed. "
